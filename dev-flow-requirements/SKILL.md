@@ -1,0 +1,162 @@
+---
+skill: dev-flow-requirements
+description: 要件定義フェーズ（Phase 1-2）- 対話的に要件を深掘りして要件定義書を作成・レビュー
+model: claude-opus-4-7
+---
+
+# Phase 1-2: 要件定義
+
+## 入力
+
+状態ファイル `doc/process/state.json` から以下を読み込み（存在する場合）：
+- requirements_paths
+- tech_stack
+- is_gui
+- is_api
+- is_e2e
+
+## Phase 1: 要件定義
+
+### 1a. 既存要件定義書の検索
+
+Bash ツールで `doc/requirements/` 配下の `.md` ファイルを列挙します：
+
+```bash
+find doc/requirements -name "*.md" 2>/dev/null | sort
+```
+
+### 1b. モード選択
+
+**ファイルが1件以上見つかった場合**
+
+AskUserQuestion ツールで選択肢を提示します：
+- 見つかったファイルを選択肢に列挙する（複数選択可）
+- 「新規作成」を最後の選択肢として必ず加える
+
+| 選択 | 動作 |
+|---|---|
+| 既存ファイルを1件以上選択 | 選択されたパスのリストを REQUIREMENTS_PATHS に設定し**修正モード**で進む |
+| 新規作成 | ファイル名を人間に確認してから `doc/requirements/{名前}.md` を REQUIREMENTS_PATHS に設定し**新規作成モード**で進む |
+| 既存ファイル＋新規作成 | 既存ファイルを REQUIREMENTS_PATHS に追加し、さらに新規ファイルを作成して追加する |
+
+**ファイルが見つからなかった場合**
+
+ファイル名を人間に確認してから `doc/requirements/{名前}.md` を REQUIREMENTS_PATHS に設定し**新規作成モード**で進む。
+
+---
+
+### 1c-A: 修正モード
+
+選択された全ファイルを Read ツールで読み込み、内容を提示します。
+
+対話の観点：
+- 「どのファイルのどの部分を変更したいですか？」から始める
+- 変更箇所のみ深掘りし、変更のない箇所は保持する
+- 合意が取れたら該当ファイルに差分を反映して上書き保存する
+
+修正完了後、変更内容から tech_stack / IS_GUI / IS_API / IS_E2E を再評価し、`doc/process/state.json` が存在する場合は該当フィールドを更新する。
+
+---
+
+### 1c-B: 新規作成モード
+
+テキストで対話しながら要件を深掘りします。
+
+以下の観点で質問・確認を行い、合意が取れたら REQUIREMENTS_PATHS の該当ファイル（新規の場合は新規ファイル）に書き出します：
+
+- 機能要件（何をするか・しないか）
+- 非機能要件（パフォーマンス・セキュリティ・スケーラビリティ）
+- 技術スタック（language, framework, DB, test_framework, linter, formatter）
+- 境界条件・エラーハンドリング
+- 既存コードとの統合方法
+- GUI の有無（IS_GUI）
+- E2E テストの要否（IS_GUI=true の場合のみ確認。フレームワーク例: Playwright / Cypress）
+
+**要件定義書フォーマット:**
+
+```markdown
+# 要件定義書
+
+## 概要
+## 技術スタック
+## 機能要件
+## 非機能要件
+## API / インターフェース定義
+## エラーハンドリング
+## 除外範囲
+## テスト戦略
+- ユニットテスト: {test_framework}
+- E2E テスト: {e2e_framework または "なし"}
+```
+
+### tech_stack と GUI フラグの確定
+
+要件定義書から以下の情報を抽出：
+
+```
+tech_stack = {
+  language, framework, test_framework, db, linter, formatter, e2e_framework
+}
+```
+
+以下のいずれかに該当する場合は **IS_GUI=true**：
+- 要件定義書に「画面」「UI」「フロントエンド」「フロント」「GUI」「画面設計」が含まれる
+- 技術スタックに React / Vue / Svelte / Next.js / Nuxt 等のフロントエンドフレームワークが含まれる
+- 上記で判断できない場合は AskUserQuestion で人間に確認する
+
+以下のいずれかに該当する場合は **IS_API=true**：
+- 要件定義書に「API」「エンドポイント」「REST」「GraphQL」「gRPC」「HTTP」が含まれる
+- 技術スタックに API フレームワーク（Gin / Echo / FastAPI / Express / NestJS 等）が含まれる
+- 上記で判断できない場合は AskUserQuestion で人間に確認する
+
+**IS_E2E の決定:**
+- IS_GUI=false の場合は **IS_E2E=false**（E2E テストは GUI が前提）
+- IS_GUI=true の場合は AskUserQuestion で「E2E テストを実施しますか？（Playwright / Cypress 等）」と人間に確認する
+  - 「実施する」→ IS_E2E=true、使用フレームワークを tech_stack.e2e_framework に設定
+  - 「実施しない」→ IS_E2E=false、e2e_framework=null
+
+---
+
+## Phase 2: 要件定義書レビュー
+
+AskUserQuestion ツールを使用してブロッキングレビューを行います。
+
+- 「承認する」→ 状態保存後に完了
+- 「修正が必要」→ 指摘内容を受けて Phase 1 に戻る
+
+---
+
+## 出力
+
+承認を受けたら、以下を実行：
+
+1. `doc/process/` ディレクトリを作成：
+   ```bash
+   mkdir -p doc/process
+   ```
+2. 以下の内容で `doc/process/state.json` を作成：
+   ```json
+   {
+     "current_phase": "phase_2",
+     "mode": "{オーケストレーターから渡された mode（"full" または "incremental"）}",
+     "baseline_commit": "{オーケストレーターから渡された baseline_commit（null または コミットハッシュ）}",
+     "requirements_paths": [REQUIREMENTS_PATHS],
+     "test_spec_path": null,
+     "api_spec_path": null,
+     "mock_path": null,
+     "tech_stack": {
+       "language": "...",
+       "framework": "...",
+       "test_framework": "...",
+       "db": "...",
+       "linter": "...",
+       "formatter": "...",
+       "e2e_framework": null
+     },
+     "is_gui": IS_GUI,
+     "is_api": IS_API,
+     "is_e2e": IS_E2E,
+     "from": "requirements"
+   }
+   ```
+3. 人間に「Phase 2 完了。次は `/dev-flow` を実行して Phase 3 に進んでください」と通知
