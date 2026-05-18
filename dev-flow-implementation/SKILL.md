@@ -325,7 +325,7 @@ gh pr create \
   --base {BASE_BRANCH} \
   --title "feat: グループ N Dev タスク実装" \
   --label "claude" \
-  --assignee "youmjww" \
+  --assignee "@me" \
   --body "$(cat <<'EOF'
 ## 概要
 チェックリスト グループ N の Dev タスクを実装しました。
@@ -346,7 +346,7 @@ gh pr create \
   --base {BASE_BRANCH} \
   --title "test: グループ N QA タスク実装" \
   --label "claude" \
-  --assignee "youmjww" \
+  --assignee "@me" \
   --body "$(cat <<'EOF'
 ## 概要
 チェックリスト グループ N の QA タスクを実装しました。
