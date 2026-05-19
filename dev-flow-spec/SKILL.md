@@ -1,6 +1,6 @@
 ---
-skill: dev-flow-spec
-description: ドキュメント生成フェーズ（Phase 3-4）- テスト定義書・API仕様書・モックを並列生成してレビュー
+name: dev-flow-spec
+description: ドキュメント生成フェーズ（Phase 3-4）を実行します。テスト定義書・API仕様書・インフラ仕様書・UIモックを並列生成し、エージェントレビューと人間レビューを経て承認を得ます。doc-team を使用して複数のwriter/reviewerを協調動作させます。
 ---
 
 

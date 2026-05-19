@@ -1,6 +1,6 @@
 ---
-skill: dev-flow-implementation
-description: 並列実装フェーズ（Phase 5）- git worktree でグループ並列実装 → 順次マージ
+name: dev-flow-implementation
+description: 並列実装フェーズ（Phase 5）を実行します。タスクチェックリストのグループを順次処理し、各グループ内でDev/QAを並列実装します。git worktreeで独立した作業環境を作成し、エージェントレビュー→PR作成→マージを繰り返します。Infra/App/Crossの3種類のチーム構成に対応します。
 ---
 
 

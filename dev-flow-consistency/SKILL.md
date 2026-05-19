@@ -1,6 +1,6 @@
 ---
-skill: dev-flow-consistency
-description: 整合性チェックフェーズ（Phase 4.5）- ドキュメント間の矛盾検出・タスク分解・設計凍結
+name: dev-flow-consistency
+description: 整合性チェックフェーズ（Phase 4.5）を実行します。ドキュメント間の矛盾・考慮漏れを検出し、タスクチェックリストとスペックキャッシュを並列生成して設計を凍結します。mode=incrementalの場合は既存コードとの差分のみを抽出します。
 ---
 
 

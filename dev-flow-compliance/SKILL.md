@@ -1,6 +1,6 @@
 ---
-skill: dev-flow-compliance
-description: ドキュメント準拠チェックフェーズ（Phase 7-8）- 実装がドキュメントに準拠しているか確認して完了報告
+name: dev-flow-compliance
+description: ドキュメント準拠チェックフェーズ（Phase 7-8）を実行します。テスト通過後の実装がドキュメントに完全に準拠しているかを確認し、乖離を実装ミス/仕様変更に分類して対応します。完了レポートを生成してstate.jsonを削除し、開発フローを終了します。
 ---
 
 

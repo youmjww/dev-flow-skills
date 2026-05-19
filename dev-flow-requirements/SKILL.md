@@ -1,6 +1,6 @@
 ---
-skill: dev-flow-requirements
-description: 要件定義フェーズ（Phase 1-2）- 対話的に要件を深掘りして要件定義書を作成・レビュー
+name: dev-flow-requirements
+description: 要件定義フェーズ（Phase 1-2）を実行します。対話的に要件を深掘りして要件定義書を作成し、人間レビューを経て承認を得ます。技術スタック・GUI/API/E2Eフラグを確定し、state.jsonを生成します。
 ---
 
 # Phase 1-2: 要件定義

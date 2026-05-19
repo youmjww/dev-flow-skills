@@ -1,6 +1,6 @@
 ---
-skill: dev-flow-test
-description: テスト実行フェーズ（Phase 6）- Haiku で開始、2回失敗で Sonnet に自動昇格してテストを全通過させる
+name: dev-flow-test
+description: テスト実行フェーズ（Phase 6）を実行します。Haikuで最大2回試行し、失敗時は自動的にSonnetに昇格してテストを全通過させます。テストコードは修正せず、プロダクションコードのみを修正する厳密なルールを適用します。E2Eテストにも対応します。
 ---
 
 
