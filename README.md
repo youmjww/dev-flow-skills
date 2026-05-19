@@ -39,10 +39,20 @@ TeamCreate("doc-team")
 **並列実装（Phase 5）**
 
 ```
-git worktree でブランチを分離
-    ├── dev/group-1 (Sonnet) ─── Dev タスク実装
-    ├── qa/group-1  (Sonnet) ─── QA タスク実装   } グループ単位で並列実行
-    └── ...
+git worktree でブランチを分離 + チーム分離アーキテクチャ
+    ├── Infra グループ（インフラのみ変更）
+    │   ├── dev/infra-group-1 (Sonnet) ─── Infra Dev タスク
+    │   └── qa/infra-group-1  (Sonnet) ─── Infra QA タスク    } 並列実行
+    │
+    ├── App グループ（アプリのみ変更）
+    │   ├── dev/app-group-2 (Sonnet) ─── App Dev タスク
+    │   └── qa/app-group-2  (Sonnet) ─── App QA タスク        } 並列実行
+    │
+    └── Cross グループ（インフラ・アプリ両方に影響）
+        ├── dev/infra-group-3 (Sonnet) ─── Infra Dev タスク   } 順次実行
+        ├── dev/app-group-3   (Sonnet) ─── App Dev タスク     } （インフラ完了後）
+        └── qa/app-group-3    (Sonnet) ─── App QA タスク      } （アプリ完了後）
+
 完了したグループから順次マージ
 ```
 
@@ -95,6 +105,7 @@ bash ~/dev-flow-skills/setup.sh
 ┌─────────────────────────────────────────────────────────┐
 │  Phase 4.5: 整合性チェック  (/dev-flow-consistency)     │
 │  - ドキュメント間の矛盾を検出                           │
+│  - タスクを Infra/App/Cross チームに分類                │
 │  - タスク分解・設計凍結                                 │
 │                               モデル: Haiku (子: Opus)   │
 └───────────────────────┬─────────────────────────────────┘
@@ -103,6 +114,10 @@ bash ~/dev-flow-skills/setup.sh
 ┌─────────────────────────────────────────────────────────┐
 │  Phase 5: 並列実装  (/dev-flow-implementation)          │
 │  - git worktree でグループ並列実装                      │
+│  - チーム種別に応じて必要なエージェントのみ起動        │
+│    * Infra: Infra Dev/QA のみ                           │
+│    * App:   App Dev/QA のみ                             │
+│    * Cross: Infra Dev → App Dev → QA（順次）           │
 │  - 実装完了後に順次マージ                               │
 │                               モデル: Haiku (子: Sonnet) │
 └───────────────────────┬─────────────────────────────────┘
@@ -124,6 +139,38 @@ bash ~/dev-flow-skills/setup.sh
 │                               モデル: Opus 4.7           │
 └─────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## チーム分離アーキテクチャ
+
+Phase 4.5 でタスクを影響範囲に基づいて自動分類し、Phase 5 で必要なチームのみ起動することで、不要なエージェント実行を防ぎます。
+
+### タスク分類ルール
+
+| チーム種別 | 判定基準 | 例 |
+|---|---|---|
+| **Infra** | インフラのみ変更 | EC2 インスタンスタイプ変更、S3 バケット追加 |
+| **App** | アプリのみ変更 | API エンドポイント追加、UI コンポーネント変更 |
+| **Cross** | インフラとアプリ両方に影響 | 環境変数追加、新規データベース追加 |
+
+### 実行パターン
+
+**Infra グループの場合：**
+- Infra Dev/QA のみ起動
+- アプリチームは起動しない
+
+**App グループの場合：**
+- App Dev/QA のみ起動
+- インフラチームは起動しない
+
+**Cross グループの場合：**
+- Infra Dev → App Dev → QA を順次起動
+- インフラ実装完了後にアプリ実装を開始
+
+**メリット：**
+- インフラのみの変更でアプリチームが出動しない（トークン・時間の節約）
+- 依存関係を考慮した順次実行（Cross グループ）
 
 ---
 
@@ -176,22 +223,28 @@ bash ~/dev-flow-skills/setup.sh
 
 ```
 dev-flow-skills/
-├── dev-flow/                    # メインオーケストレーター
-│   ├── SKILL.md                 # オーケストレーターのエントリポイント
-│   ├── phase-requirements.md    # Phase 1-2 の詳細定義
-│   ├── phase-spec.md            # Phase 3-4 の詳細定義
-│   ├── phase-consistency.md     # Phase 4.5 の詳細定義
-│   ├── phase-implementation.md  # Phase 5 の詳細定義
-│   ├── phase-test.md            # Phase 6 の詳細定義
-│   ├── phase-compliance.md      # Phase 7-8 の詳細定義
-│   └── workflow.mmd             # フロー図（Mermaid）
-├── dev-flow-requirements/       # Phase 1-2 スキル
-├── dev-flow-spec/               # Phase 3-4 スキル
-├── dev-flow-consistency/        # Phase 4.5 スキル
-├── dev-flow-implementation/     # Phase 5 スキル
-├── dev-flow-test/               # Phase 6 スキル
-├── dev-flow-compliance/         # Phase 7-8 スキル
-└── setup.sh                     # シンボリックリンク作成スクリプト
+├── dev-flow/                       # メインオーケストレーター
+│   ├── SKILL.md                    # オーケストレーターのエントリポイント
+│   ├── phase-requirements.md       # Phase 1-2 の詳細定義
+│   ├── phase-spec.md               # Phase 3-4 の詳細定義
+│   ├── phase-consistency.md        # Phase 4.5 の詳細定義
+│   ├── phase-implementation.md     # Phase 5 の詳細定義
+│   ├── phase-test.md               # Phase 6 の詳細定義
+│   ├── phase-compliance.md         # Phase 7-8 の詳細定義
+│   └── workflow.mmd                # フロー図（Mermaid）
+├── dev-flow-requirements/          # Phase 1-2 スキル
+├── dev-flow-spec/                  # Phase 3-4 スキル
+├── dev-flow-consistency/           # Phase 4.5 スキル
+├── dev-flow-implementation/        # Phase 5 スキル
+│   ├── SKILL.md                    # 実装オーケストレーター
+│   └── prompts/                    # エージェントプロンプト（チーム別）
+│       ├── dev-infra.md            # Infra Dev エージェント
+│       ├── dev-app.md              # App Dev エージェント
+│       ├── qa-infra.md             # Infra QA エージェント
+│       └── qa-app.md               # App QA エージェント
+├── dev-flow-test/                  # Phase 6 スキル
+├── dev-flow-compliance/            # Phase 7-8 スキル
+└── setup.sh                        # シンボリックリンク作成スクリプト
 ```
 
 ---
