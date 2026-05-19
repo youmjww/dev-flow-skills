@@ -12,6 +12,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 まず以下のドキュメントを Read ツールで読み込んでください（トークン節約のため、スペックキャッシュを優先すること）：
 - スペックキャッシュ: `{メインディレクトリ}/doc/internal/spec_cache.md`
 - テスト定義書: `{メインディレクトリ}/{TEST_SPEC_PATH}`
+- インフラ仕様書（IS_INFRA=true の場合）: `{メインディレクトリ}/{INFRA_SPEC_PATH}`
 - タスクチェックリスト（グループ {GROUP_N} の QA (Infra) タスクのみ対象）: `{メインディレクトリ}/doc/process/task_checklist.md`
 
 詳細が必要な場合のみ要件定義書を参照すること: {メインディレクトリ}/{REQUIREMENTS_PATHS}

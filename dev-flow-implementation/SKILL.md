@@ -12,10 +12,12 @@ description: 並列実装フェーズ（Phase 5）- git worktree でグループ
 - requirements_paths
 - test_spec_path
 - api_spec_path (IS_API=true の場合)
+- infra_spec_path (IS_INFRA=true の場合)
 - mock_path (IS_GUI=true の場合)
 - tech_stack
 - is_gui
 - is_api
+- is_infra
 - mode（`"full"` または `"incremental"`）
 - baseline_commit（`incremental` 時のみ有効）
 
