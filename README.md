@@ -50,8 +50,9 @@ git worktree でブランチを分離 + チーム分離アーキテクチャ
     │
     └── Cross グループ（インフラ・アプリ両方に影響）
         ├── dev/infra-group-3 (Sonnet) ─── Infra Dev タスク   } 順次実行
-        ├── dev/app-group-3   (Sonnet) ─── App Dev タスク     } （インフラ完了後）
-        └── qa/app-group-3    (Sonnet) ─── App QA タスク      } （アプリ完了後）
+        ├── qa/infra-group-3  (Sonnet) ─── Infra QA タスク    } （Infra Dev 完了後）
+        ├── dev/app-group-3   (Sonnet) ─── App Dev タスク     } （Infra QA 完了後）
+        └── qa/app-group-3    (Sonnet) ─── App QA タスク      } （App Dev 完了後）
 
 完了したグループから順次マージ
 ```
