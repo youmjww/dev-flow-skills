@@ -1,7 +1,7 @@
 ---
 skill: dev-flow:phase-compliance
 description: ドキュメント準拠チェックフェーズ（Phase 7-8）- 実装がドキュメントに準拠しているか確認して完了報告
-model: claude-opus-4-7
+model: opus
 ---
 
 # Phase 7-8: ドキュメント準拠チェックと完了報告
@@ -21,7 +21,7 @@ model: claude-opus-4-7
 
 **原則: ドキュメントが正です。乖離が見つかった場合は実装を修正してください。**
 
-以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="claude-opus-4-7"`）：
+以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="opus"`）：
 
 ---
 **ドキュメント準拠チェックプロンプト**

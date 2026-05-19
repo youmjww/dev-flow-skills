@@ -1,7 +1,7 @@
 ---
 skill: dev-flow:phase-consistency
 description: 整合性チェックフェーズ（Phase 4.5）- ドキュメント間の矛盾検出・タスク分解・設計凍結
-model: claude-haiku-4-5-20251001
+model: haiku
 ---
 
 # Phase 4.5: ドキュメント整合性チェックと設計凍結
@@ -21,7 +21,7 @@ model: claude-haiku-4-5-20251001
 
 実装開始前に各ドキュメント内部の考慮漏れ・矛盾、およびドキュメント間の矛盾を検出します。
 
-以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="claude-opus-4-7"`）：
+以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="opus"`）：
 
 ---
 **整合性チェックプロンプト**
@@ -97,7 +97,7 @@ model: claude-haiku-4-5-20251001
 
 ## Phase 4.5b: タスクチェックリストの作成
 
-以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="claude-sonnet-4-6"`）：
+以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="sonnet"`）：
 
 ---
 **タスクチェックリスト生成プロンプト**
@@ -154,7 +154,7 @@ model: claude-haiku-4-5-20251001
 
 ## Phase 4.5c: スペックキャッシュの生成
 
-タスクチェックリスト生成と **同時に** 以下のプロンプトで Agent を起動（`run_in_background=true`, `model="claude-sonnet-4-6"`）：
+タスクチェックリスト生成と **同時に** 以下のプロンプトで Agent を起動（`run_in_background=true`, `model="sonnet"`）：
 
 ---
 **スペックキャッシュ生成プロンプト**

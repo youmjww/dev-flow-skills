@@ -1,7 +1,7 @@
 ---
 skill: dev-flow:phase-spec
 description: ドキュメント生成フェーズ（Phase 3-4）- テスト定義書・API仕様書・モックを並列生成してレビュー
-model: claude-haiku-4-5-20251001
+model: haiku
 ---
 
 # Phase 3-4: ドキュメント生成とレビュー
@@ -22,7 +22,7 @@ model: claude-haiku-4-5-20251001
 
 ### 3a. テスト定義書の生成（バックグラウンド）
 
-以下のプロンプトで Agent を起動（`run_in_background=true`, `model="claude-sonnet-4-6"`）：
+以下のプロンプトで Agent を起動（`run_in_background=true`, `model="sonnet"`）：
 
 ---
 **テスト定義書生成プロンプト**
@@ -51,7 +51,7 @@ model: claude-haiku-4-5-20251001
 
 ### 3b. API仕様書の生成（IS_API=true の場合・バックグラウンド）
 
-3a と同時に以下のプロンプトで Agent を起動（`run_in_background=true`, `model="claude-sonnet-4-6"`）：
+3a と同時に以下のプロンプトで Agent を起動（`run_in_background=true`, `model="sonnet"`）：
 
 ---
 **API仕様書生成プロンプト**
@@ -102,7 +102,7 @@ model: claude-haiku-4-5-20251001
 
 ### 3c. モック HTML の生成（IS_GUI=true の場合・バックグラウンド）
 
-3a・3b と同時に以下のプロンプトで Agent を起動（`run_in_background=true`, `model="claude-sonnet-4-6"`）：
+3a・3b と同時に以下のプロンプトで Agent を起動（`run_in_background=true`, `model="sonnet"`）：
 
 ---
 **モック生成プロンプト**

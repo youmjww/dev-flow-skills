@@ -1,8 +1,8 @@
 ---
 skill: dev-flow-test
 description: テスト実行フェーズ（Phase 6）- Haiku で開始、2回失敗で Sonnet に自動昇格してテストを全通過させる
-model: claude-haiku-4-5-20251001
 ---
+
 
 # Phase 6: テスト実行（ハイブリッドモデル）
 
@@ -20,7 +20,7 @@ TeamCreate(name: "test-team")
 
 ## Phase 6a: test-orchestrator を同期起動
 
-以下のプロンプトで Agent を起動（`team_name="test-team"`, `name="test-orchestrator"`, `run_in_background=false`, `model="claude-haiku-4-5-20251001"`, `mode="acceptEdits"`）：
+以下のプロンプトで Agent を起動（`team_name="test-team"`, `name="test-orchestrator"`, `run_in_background=false`, `model="haiku"`, `mode="acceptEdits"`）：
 
 ---
 **test-orchestrator プロンプト**
@@ -32,7 +32,7 @@ E2E テストあり: `{IS_E2E}`
 
 ### STEP 1: test-runner-haiku の起動
 
-以下の設定で `test-runner-haiku` を起動してください（`team_name="test-team"`, `name="test-runner-haiku"`, `run_in_background=true`, `model="claude-haiku-4-5-20251001"`, `mode="acceptEdits"`）：
+以下の設定で `test-runner-haiku` を起動してください（`team_name="test-team"`, `name="test-runner-haiku"`, `run_in_background=true`, `model="haiku"`, `mode="acceptEdits"`）：
 
 **test-runner-haiku プロンプト:**
 
@@ -81,7 +81,7 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 ### STEP 3: Sonnet へ昇格（Haiku が2回失敗した場合のみ実行）
 
-Haiku の試行履歴を受け取った場合のみ、以下の設定で `test-runner-sonnet` を起動（`team_name="test-team"`, `name="test-runner-sonnet"`, `run_in_background=false`, `model="claude-sonnet-4-6"`, `mode="acceptEdits"`）：
+Haiku の試行履歴を受け取った場合のみ、以下の設定で `test-runner-sonnet` を起動（`team_name="test-team"`, `name="test-runner-sonnet"`, `run_in_background=false`, `model="sonnet"`, `mode="acceptEdits"`）：
 
 **test-runner-sonnet プロンプト:**
 

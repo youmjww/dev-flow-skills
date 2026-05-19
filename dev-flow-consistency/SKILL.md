@@ -1,8 +1,8 @@
 ---
 skill: dev-flow-consistency
 description: 整合性チェックフェーズ（Phase 4.5）- ドキュメント間の矛盾検出・タスク分解・設計凍結
-model: claude-haiku-4-5-20251001
 ---
+
 
 # Phase 4.5: ドキュメント整合性チェックと設計凍結
 
@@ -26,7 +26,7 @@ model: claude-haiku-4-5-20251001
 - **`mode = "full"`**: ドキュメント間の矛盾・考慮漏れを検出する（従来通り）
 - **`mode = "incremental"`**: `baseline_commit` 以降に変更されたドキュメントと既存コードを比較し、「未実装の差分」を検出する
 
-以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="claude-opus-4-7"`）：
+以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="opus"`）：
 
 ---
 **整合性チェックプロンプト**
@@ -166,7 +166,7 @@ TeamCreate で `consistency-team` を作成し、以下の2エージェントを
 TeamCreate(name: "consistency-team")
 ```
 
-### タスクチェックリスト生成（`run_in_background=true`, `model="claude-sonnet-4-6"`, `name="checklist-writer"`, `mode="acceptEdits"`）
+### タスクチェックリスト生成（`run_in_background=true`, `model="sonnet"`, `name="checklist-writer"`, `mode="acceptEdits"`）
 
 ---
 **タスクチェックリスト生成プロンプト**
@@ -242,7 +242,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 
 ---
 
-### スペックキャッシュ生成（`run_in_background=true`, `model="claude-sonnet-4-6"`, `name="spec-cache-writer"`, `mode="acceptEdits"`）
+### スペックキャッシュ生成（`run_in_background=true`, `model="sonnet"`, `name="spec-cache-writer"`, `mode="acceptEdits"`）
 
 ---
 **スペックキャッシュ生成プロンプト**
@@ -280,7 +280,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 
 ---
 
-### consistency-orchestrator（`run_in_background=true`, `model="claude-haiku-4-5-20251001"`, `name="consistency-orchestrator"`, `team_name="consistency-team"`）
+### consistency-orchestrator（`run_in_background=true`, `model="haiku"`, `name="consistency-orchestrator"`, `team_name="consistency-team"`）
 
 ---
 `checklist-writer` からの「checklist 生成完了」通知と、`spec-cache-writer` からの「spec-cache 生成完了」通知を待ってください。
