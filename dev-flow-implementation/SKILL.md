@@ -37,6 +37,8 @@ description: 並列実装フェーズ（Phase 5）- git worktree でグループ
 - 各グループの Dev タスク・QA タスクを一覧化する
 - **各グループのチーム種別（Infra / App / Cross）を抽出する**（グループ見出しから `(Infra)`, `(App)`, `(Cross)` を読み取る）
 
+例: `### グループ 1 (Infra)` → `group_types["group-1"] = "Infra"`
+
 次に `doc/process/state.json` を Read ツールで読み込み、`phase_5_progress` フィールドを確認します。
 
 **`phase_5_progress` が存在する場合（前回の中断あり）:**
@@ -71,10 +73,17 @@ git branch --show-current
     "total_groups": {グループ数},
     "completed_groups": [],
     "active_worktrees": [],
-    "base_branch": "{git branch --show-current の結果}"
+    "base_branch": "{git branch --show-current の結果}",
+    "group_types": {
+      "group-1": "Infra",
+      "group-2": "App",
+      "group-3": "Cross"
+    }
   }
 }
 ```
+
+`group_types` は 5-pre-a で抽出したチーム種別をすべて記録します
 
 ---
 
@@ -88,7 +97,7 @@ git branch --show-current
 
 `completed_groups` に含まれるグループは **スキップ** して次のグループへ進みます。
 
-まず、グループのチーム種別に応じて実行するエージェントを決定します：
+まず、`state.json` の `phase_5_progress.group_types["group-N"]` からグループのチーム種別を取得し、実行するエージェントを決定します：
 
 | チーム種別 | 実行するエージェント | 説明 |
 |---|---|---|
