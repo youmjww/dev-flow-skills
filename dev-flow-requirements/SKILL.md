@@ -1,7 +1,6 @@
 ---
 skill: dev-flow-requirements
 description: 要件定義フェーズ（Phase 1-2）- 対話的に要件を深掘りして要件定義書を作成・レビュー
-model: claude-opus-4-7
 ---
 
 # Phase 1-2: 要件定義

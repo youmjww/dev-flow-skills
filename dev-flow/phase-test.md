@@ -1,7 +1,7 @@
 ---
 skill: dev-flow:phase-test
 description: テスト実行フェーズ（Phase 6）- Haiku で開始、2回失敗で Sonnet に自動昇格してテストを全通過させる
-model: claude-haiku-4-5-20251001
+model: haiku
 ---
 
 # Phase 6: テスト実行（ハイブリッドモデル）
@@ -14,7 +14,7 @@ model: claude-haiku-4-5-20251001
 
 ## Phase 6a: Haiku 4.5 でテスト実行エージェント起動
 
-以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="claude-haiku-4-5-20251001"`）：
+以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="haiku"`）：
 
 ---
 **テストランナープロンプト（Haiku 版）**
@@ -63,7 +63,7 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 ## Phase 6b: Sonnet 4.5 への切り替え（Haiku が2回失敗した場合）
 
-Haiku エージェントから上記報告を受けた場合、以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="claude-sonnet-4-6"`）：
+Haiku エージェントから上記報告を受けた場合、以下のプロンプトで Agent を起動（同期実行、`run_in_background=false`, `model="sonnet"`）：
 
 ---
 **テストランナープロンプト（Sonnet 版）**
