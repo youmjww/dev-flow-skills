@@ -141,8 +141,18 @@ AskUserQuestion で確認：
 | phase_2 | Phase 3-4: ドキュメント生成 | `phase-spec-agent` | haiku | `~/.claude/skills/dev-flow-spec/SKILL.md` |
 | phase_4 | Phase 4.5: 整合性チェック | `phase-consistency-agent` | haiku | `~/.claude/skills/dev-flow-consistency/SKILL.md` |
 | phase_4_5 | Phase 5: 並列実装 | `phase-impl-agent` | haiku | `~/.claude/skills/dev-flow-implementation/SKILL.md` |
+| phase_4_5_mini | Phase 4.5（mini）: 計画修正 | `phase-consistency-mini-agent` | haiku | `~/.claude/skills/dev-flow-consistency/SKILL.md` |
 | phase_5 | Phase 6: テスト実行 | `phase-test-agent` | haiku | `~/.claude/skills/dev-flow-test/SKILL.md` |
 | phase_6 | Phase 7-8: 準拠チェック・完了 | `phase-compliance-agent` | opus | `~/.claude/skills/dev-flow-compliance/SKILL.md` |
+
+**`phase_4_5_mini` の特別処理:**
+
+`phase_4_5_mini` は Phase 5 中の Plan Repair によって一時的に設定されます。通常フローとは異なり、以下の動作をします：
+
+1. `phase-impl-agent` の STEP C 内で Plan Repair フローが判断し、`state.json.current_phase` を `"phase_4_5_mini"` に設定
+2. このオーケストレーターは `phase_4_5_mini` を検出したら `phase-consistency-mini-agent` を起動（mini モードでスキルファイルを実行）
+3. mini モード完了後、`state.json.current_phase` は `"phase_4_5"` に戻る
+4. STEP 5 の移行判定では `phase_4_5` として扱い、Phase 5 を未着手グループから再開する
 
 **タスク作成:**
 
@@ -239,6 +249,7 @@ TaskUpdate(id: "{task_id}", status: "completed")
 | phase_2（Phase 1-2: 要件定義） | phase_2 → Phase 3-4 | **手動確認**：人間に「要件定義が完了しました。内容を確認してから `/dev-flow` を実行してください。」と案内 |
 | phase_4（Phase 3-4: ドキュメント生成） | phase_4 → Phase 4.5 | **自動移行**：STEP 2 に戻って Phase 4.5 を自動実行 |
 | phase_4_5（Phase 4.5: 整合性チェック） | phase_4_5 → Phase 5 | **自動移行**：STEP 2 に戻って Phase 5 を自動実行 |
+| phase_4_5_mini（Plan Repair） | phase_4_5_mini → Phase 5（再開） | **自動移行**：state.json の `current_phase` を `phase_4_5` に戻してから STEP 2 → Phase 5 を再開 |
 | phase_5（Phase 5: 並列実装） | phase_5 → Phase 6 | **自動移行**：STEP 2 に戻って Phase 6 を自動実行 |
 | phase_6（Phase 6: テスト実行） | phase_6 → Phase 7-8 | **自動移行**：STEP 2 に戻って Phase 7-8 を自動実行 |
 

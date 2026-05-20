@@ -45,10 +45,24 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - テスト定義書を参照し、テストから呼び出しやすいインターフェース設計にする
 
 **2. ブロッカーチェック**
-- 要件の解釈が複数あり判断できない場合は、実装を中断してメインオーケストレーターに報告する：
-  - ブロッカーの内容
-  - 判断が必要な選択肢
-  - 推奨案（あれば）
+- 要件の解釈が複数あり判断できない場合は、実装を中断してメインオーケストレーターに JSON で報告する（step 5 参照）
+- **計画修正が必要な場合**（グループ分けの誤り・依存関係の発見等）は `blocker_type: "plan_repair_needed"` で報告する：
+
+```json
+{
+  "agent": "dev-implementer-app-group-{GROUP_N}",
+  "status": "blocked",
+  "blocker_type": "plan_repair_needed",
+  "reason": "このタスクは Infra グループのリソースに依存しているが、まだマージされていない",
+  "suggested_repair": {
+    "action": "reorder_groups",
+    "description": "Infra グループを先にマージしてから App グループを実行する"
+  },
+  "confidence": 0.4,
+  "needs_human_review": true,
+  "blockers": []
+}
+```
 
 **3. lint / format の実行**（worktree ディレクトリ内で実行）
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する
