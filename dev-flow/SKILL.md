@@ -43,16 +43,6 @@ allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion 
 | `test` | Phase 6 | 必要 |
 | `sync` | Phase 7 | 必要 |
 
-**`--dry-run` 時の出力例:**
-
-```
-[dry-run] 実行計画:
-  Phase 1-2: phase-requirements-agent (opus)  ← 下流スキル: 存在 ✓
-  Phase 3-4: phase-spec-agent (haiku)          ← 下流スキル: 欠損 ✗  ~/.claude/skills/dev-flow-spec/SKILL.md が見つかりません
-  ...
-✅ 全スキルファイル確認完了 / ❌ 欠損スキルあり。setup.sh を実行してください。
-```
-
 ### STEP 1.2: 下流スキルファイルの事前検証
 
 STEP 1 直後に必ず実行（`--dry-run` の有無に関わらず）。欠損を早期検知する：
@@ -69,15 +59,36 @@ for f in \
 done
 ```
 
-`MISSING:` 行が1件以上 → AskUserQuestion で人間に報告して中断。
+判定と後続動作：
+
+| 検証結果 | DRY_RUN=false | DRY_RUN=true |
+|---|---|---|
+| `MISSING:` 行が1件以上 | AskUserQuestion で人間に報告して中断 | 下記 dry-run 出力で欠損行を `✗` で示してから終了 |
+| すべて存在 | STEP 1.5 へ進む | 下記 dry-run 出力で全行 `✓` を示してから終了（STEP 1.5 以降はスキップ） |
+
+**`--dry-run` 時の出力例:**
+
+```
+[dry-run] 実行計画:
+  Phase 1-2: phase-requirements-agent (opus)  ← 下流スキル: 存在 ✓
+  Phase 3-4: phase-spec-agent (haiku)          ← 下流スキル: 欠損 ✗  ~/.claude/skills/dev-flow-spec/SKILL.md が見つかりません
+  ...
+✅ 全スキルファイル確認完了 / ❌ 欠損スキルあり。setup.sh を実行してください。
+```
 
 ### STEP 1.5: 開発モードの判定（state.json が存在しない場合のみ）
 
 **1. 既存実装の確認:**
 
+テストファイルのみのリポジトリを「既存実装あり」と誤判定しないよう、テスト系ファイルを除外してから本体実装をカウントする：
+
 ```bash
 git log --oneline -1 2>/dev/null
-git ls-files | grep -cE '\.(go|py|ts|tsx|js|jsx|rb|java|rs|kt|swift|c|cpp|cs)$' 2>/dev/null || echo 0
+git ls-files \
+  | grep -vE '(^|/)(tests?|spec|__tests__)/' \
+  | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx|py|rb)$' \
+  | grep -vE '_test\.(go|py|rb)$' \
+  | grep -cE '\.(go|py|ts|tsx|js|jsx|rb|java|rs|kt|swift|c|cpp|cs)$' 2>/dev/null || echo 0
 ```
 
 出力が `1` 以上 → 実装コードあり。`0` → `"full"` モード確定。
@@ -121,7 +132,19 @@ git ls-files | grep -cE '\.(go|py|ts|tsx|js|jsx|rb|java|rs|kt|swift|c|cpp|cs)$' 
 
 スキルファイルのパスはすべて `~/.claude/skills/` 配下。
 
-**`phase_4_5_mini` 特別処理:** Plan Repair で設定される一時フェーズ。完了後 `current_phase` を `"phase_4_5"` に戻して Phase 5 を再開。
+**`phase_4_5_mini` 特別処理:**
+
+Plan Repair によって設定される一時フェーズ。発動シーケンスは下記：
+
+| # | アクター | 動作 |
+|---|---|---|
+| 1 | `phase-impl-agent` | Phase 5 中にグループから `status: "blocked"` / `blocker_type: "plan_repair_needed"` を受信 |
+| 2 | `phase-impl-agent` | AskUserQuestion で「承認 / 却下 / 全体再生成」を提示。承認時に `state.json.current_phase` を `"phase_4_5_mini"` に書き換えて終了 |
+| 3 | `dev-flow` オーケストレーター | 次イテレーションで `current_phase = "phase_4_5_mini"` を検出し `phase-consistency-mini-agent`（mini モード）を起動 |
+| 4 | `phase-consistency-mini-agent` | 未着手グループのみチェックリストを再生成し、完了後 `current_phase` を `"phase_4_5"` に書き戻して終了 |
+| 5 | `dev-flow` オーケストレーター | `current_phase = "phase_4_5"` を検出して Phase 5 を未着手グループから再開 |
+
+Plan Repair の発動上限は **3 回**。超過時は `requirement_ambiguity` として人間エスカレーション。詳細は `~/.claude/skills/dev-flow-implementation/SKILL.md` の「Plan Repair フロー」および `dev-flow-implementation/reference/plan-repair.md` を参照。
 
 **タスク作成:**
 
@@ -160,6 +183,13 @@ Agent(
 )
 ```
 
+**モデル指定のルール:**
+
+- 上のフェーズ対応表に書かれた `モデル` 列は、各下流スキルの frontmatter (`model:`) と一致しており、その値をそのまま `Agent(model=…)` に渡す
+- スキル frontmatter のモデルは**スキル作者が品質とコストを勘案して選択した値**であり、オーケストレーター側で勝手に上書きしない
+- 上書きが必要な場合（例: テスト目的・ユーザー指定）は AskUserQuestion で人間に確認してから変更する
+- フェーズ対応表とスキル frontmatter が食い違っている場合はスキル frontmatter を信頼し、表側を修正する
+
 **フェーズ間依存関係と run_in_background:**
 
 | フェーズ | 並列実行可否 | run_in_background |
@@ -169,6 +199,16 @@ Agent(
 | Phase 6〜7-8 | 不可（直列） | false |
 
 Phase 5 で並列化する場合は `active_worktrees` に追加し SendMessage 完了通知を待つ。Cross グループは直列。
+
+**Phase 5 PR マージ待機の責任分担:**
+
+| アクター | 責任 |
+|---|---|
+| `phase-impl-agent`（サブエージェント） | グループの実装完了後に `gh pr create` で PR を作成し、PR 番号を `phase_5_progress.pr_numbers["group-N"]` へ書き込んでから完了通知を返す |
+| `dev-flow` オーケストレーター | 完了通知を受けたら `pr_numbers` を読み、`gh pr view <N> --json state` を60秒間隔でポーリング。`MERGED` を確認したら `completed_groups` に追加し、依存解決済みの次グループを起動 |
+| 人間 | PR レビュー・マージ。30分経過してもマージされない場合は AskUserQuestion で確認する |
+
+マージは**人間が手動で実施する前提**。オーケストレーターが自動マージすることは無い（`gh pr merge` を発行しない）。詳細は `~/.claude/skills/dev-flow/reference/state-schema.md` の「Phase 5 PR マージ待機ロジック」を参照。
 
 ### STEP 5: タスク完了 & チェックリスト更新 & 次フェーズへの移行判定
 

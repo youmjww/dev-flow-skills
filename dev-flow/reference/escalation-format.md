@@ -35,10 +35,22 @@
 
 ユーザーが回答した後、以下の基準で再開フェーズを決定する：
 
-| 理由 | 再開フェーズ | `--from` 値 |
+| 理由 | 再開フェーズ | 推奨 `--from` 値 |
 |---|---|---|
 | 要件の曖昧さ | Phase 1 | `requirements` |
 | 仕様間の矛盾 | Phase 3-4 | `spec` |
-| 技術的制約 | Phase 4.5 | なし（オーケストレーターが `state.json.current_phase` を `"phase_4"` に書き換えて再実行） |
+| 技術的制約（技術スタック・実装方針の見直しが必要） | Phase 3-4 | `spec` |
 | テスト失敗 | Phase 5（対象グループのみ） | `parallel` |
-| その他 | 人間が `/dev-flow --from={値}` で指定 | 人間が判断 |
+| その他 | 人間が判断 | 人間が `/dev-flow --from={値}` で指定 |
+
+**重要：再開は必ず `--from` 引数経由で行う。**
+
+オーケストレーターが `state.json.current_phase` を直接書き換える運用は禁止する。理由：
+
+- `current_phase` のみ書き換えても `baseline_commit` / `phase_5_progress` / `tech_stack` など他フィールドとの整合性が崩れる
+- 直接書き換えは復旧パスから漏れやすく、トラブルシュート時にどのフェーズに戻したか追跡できなくなる
+- `--from` 経由なら STEP 2 の state.json 読み込みロジックが整合性を再検証するため安全
+
+エスカレーション報告では、AskUserQuestion で人間に「`/dev-flow --from={値}` を実行してください」と提示し、ユーザーに再開を委ねる。
+
+**例外：`phase_4_5_mini`（Plan Repair）のみ、Phase 5 内部の閉じたサイクルとして `current_phase` を書き換える運用を許可する**（詳細は `dev-flow/SKILL.md` の「`phase_4_5_mini` 特別処理」を参照）。

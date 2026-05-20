@@ -414,8 +414,13 @@ AskUserQuestionで人間にPR URLを提示してマージ完了を確認。
 
 すべてのグループ完了後：
 
-1. `doc/process/state.json` を更新：`current_phase` を `"phase_5"` に、`phase_5_progress` を削除
+1. `doc/process/state.json` を更新：
+   - `current_phase` を `"phase_5"` に変更
+   - `phase_5_progress` を削除
+   - **`mode == "incremental"` の場合のみ**：`baseline_commit` を `git rev-parse HEAD`（ベースブランチに全 PR がマージされた後の最新コミット）で上書き。これにより、次回 `incremental` 実行時の差分基点が今回マージ完了時点に進む
 2. 人間に「Phase 5 完了。次は `/dev-flow` を実行して Phase 6 に進んでください」と通知
+
+`baseline_commit` 更新の責任分担詳細は `~/.claude/skills/dev-flow/reference/state-schema.md` の「baseline_commit のライフサイクル」を参照。
 
 ---
 
