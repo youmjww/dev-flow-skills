@@ -19,7 +19,7 @@ allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion 
 主要フィールド: `current_phase` / `mode`（full or incremental）/ `baseline_commit` / `tech_stack` / `phase_5_progress`
 
 スキーマ詳細・PR マージ待機ロジック・harness メタデータは必要時に Read すること:
-`~/.claude/skills/dev-flow/state-schema.md`
+`~/.claude/skills/dev-flow/reference/state-schema.md`
 
 ---
 
@@ -201,13 +201,13 @@ Phase 5 で並列化する場合は `active_worktrees` に追加し SendMessage 
 エスカレーションが必要な場合は `doc/process/escalation_{phase}_{timestamp}.md` を生成して AskUserQuestion で提示する。
 
 フォーマット・recovery パス詳細は Read すること:
-`~/.claude/skills/dev-flow/escalation-format.md`
+`~/.claude/skills/dev-flow/reference/escalation-format.md`
 
 ---
 
 ## エラーハンドリング
 
 エラー対処の詳細は Read すること:
-`~/.claude/skills/dev-flow/error-handling.md`
+`~/.claude/skills/dev-flow/reference/error-handling.md`
 
 主なケース: state.json 破損・Agent 起動失敗・サブエージェント停止・チェックリスト更新失敗
