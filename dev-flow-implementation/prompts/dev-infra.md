@@ -59,11 +59,29 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 
 **5. 全タスク完了 → 以下の JSON で SendMessage する:**
 
-```
-SendMessage(
-  to: "phase-impl-agent",
-  message: '{"agent":"dev-implementer-infra-group-{GROUP_N}","status":"completed","result":{"changed_files":{変更ファイル数},"commits":[{コミットハッシュ一覧を文字列配列で}]},"blockers":[]}'
-)
+完了時には **自己評価フィールド**を必ず含めること。`uncertainty_points` が1件でもある場合は `needs_human_review` を `true` にすること（迷ったら必ず申告する）。
+
+```json
+{
+  "agent": "dev-implementer-infra-group-{GROUP_N}",
+  "status": "completed",
+  "result": {
+    "changed_files": {変更ファイル数},
+    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"]
+  },
+  "confidence": 0.85,
+  "uncertainty_points": [
+    {
+      "topic": "（不確実な判断のトピック）",
+      "reason": "（なぜ迷ったか）",
+      "alternatives_considered": ["選択肢A", "選択肢B"],
+      "chosen": "選択肢A",
+      "rationale": "（選んだ理由）"
+    }
+  ],
+  "needs_human_review": false,
+  "blockers": []
+}
 ```
 
 ブロッカー発生時は `status: "blocked"` で報告する:
@@ -74,6 +92,8 @@ SendMessage(
   "status": "blocked",
   "blocker_type": "requirement_ambiguity",
   "reason": "{ブロッカーの内容}",
+  "confidence": 0.3,
+  "needs_human_review": true,
   "blockers": [{"description": "...", "options": ["選択肢A", "選択肢B"], "recommendation": "推奨案"}]
 }
 ```
