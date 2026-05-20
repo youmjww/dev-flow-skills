@@ -3,7 +3,6 @@ name: dev-flow
 description: AI駆動開発フローのメインオーケストレーター。要件定義→ドキュメント生成→整合性チェック→並列実装→テスト→準拠チェックの全フェーズをサブエージェント経由で順次実行します。新機能を要件定義から実装まで一気通貫で自動化したい時、または `doc/process/state.json` から既存フローを継続したい時に使用します。
 model: haiku
 allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion
-paths: doc/process/state.json
 ---
 
 # 開発フローオーケストレーター
