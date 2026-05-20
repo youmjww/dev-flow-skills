@@ -68,8 +68,36 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
-- コミットメッセージ例: `feat: {機能名} を実装`
+
+コミットメッセージには必ず `Implements:` と `Tests:` フッターを含めること：
+
+```
+feat: {機能名} を実装
+
+Implements: REQ-001, INFRA-001
+Tests: TC-001, TC-002
+```
+
+- `Implements:` に実装対象の REQ-ID と API-ID / INFRA-ID を記載
+- `Tests:` に対応するテストケース TC-ID を記載（テストが存在する場合）
+- ID が不明な場合はタスクチェックリストまたはスペックキャッシュを参照
 - **チェックリストの更新はしない**（マージ後にオーケストレーターが行う）
+
+**4.5. 推論トレースの記録（全タスク完了前）:**
+
+実装中に行った主要な意思決定を `{メインディレクトリ}/doc/process/reasoning/phase5-dev-infra-group-{GROUP_N}.md` に記録してください：
+
+```markdown
+# Phase 5 Dev (Infra) グループ {GROUP_N} - 推論トレース
+
+## 主要な意思決定
+
+### 決定1: （決定のタイトル）
+- **決定内容**: （何を選んだか）
+- **検討した代替案**: （案A / 案B）
+- **選んだ根拠**: （理由）
+- **不確実性**: （残っている不確かさ）
+```
 
 **5. 全タスク完了 → 以下の JSON で SendMessage する:**
 
