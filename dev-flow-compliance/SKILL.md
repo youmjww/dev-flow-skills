@@ -1,6 +1,9 @@
 ---
 name: dev-flow-compliance
-description: ドキュメント準拠チェックフェーズ（Phase 7-8）を実行します。テスト通過後の実装がドキュメントに完全に準拠しているかを確認し、乖離を実装ミス/仕様変更に分類して対応します。完了レポートを生成してstate.jsonを削除し、開発フローを終了します。
+description: AI駆動開発フローの準拠チェックフェーズ（Phase 7-8）。カバレッジ行列で TC-NNN・API-NNN の実装存在を機械的に検証し、実装がドキュメントに完全準拠しているか確認します。乖離は実装ミス/仕様変更に分類して対応し、完了レポートを生成して `doc/process/state.json` を削除しフローを終了します。Phase 6 テスト通過後、または `--from=compliance` 起動時に使用します。
+model: opus
+allowed-tools: Read Write Edit Bash AskUserQuestion
+paths: doc/process/state.json
 ---
 
 

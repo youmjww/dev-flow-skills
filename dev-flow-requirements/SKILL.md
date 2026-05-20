@@ -1,6 +1,8 @@
 ---
 name: dev-flow-requirements
-description: 要件定義フェーズ（Phase 1-2）を実行します。対話的に要件を深掘りして要件定義書を作成し、人間レビューを経て承認を得ます。技術スタック・GUI/API/E2Eフラグを確定し、state.jsonを生成します。
+description: AI駆動開発フローの要件定義フェーズ（Phase 1-2）。ユーザーと対話しながら要件を深掘りして要件定義書を作成し、曖昧表現リント・用語集整備・REQ-NNN ID付与を行います。技術スタック・GUI/API/E2Eフラグを確定して `doc/process/state.json` を生成します。新規開発フローの初回起動時、または `--from=requirements` で要件から再開する時に使用します。
+model: opus
+allowed-tools: Read Write Edit Bash AskUserQuestion
 ---
 
 # Phase 1-2: 要件定義

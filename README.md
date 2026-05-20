@@ -167,9 +167,9 @@ flowchart TD
 
 各フェーズ完了時に `doc/process/state.json` へ状態を保存し、次回の `/dev-flow` 実行時に自動復元します。`harness` セクションに再現性メタデータ（フェーズ履歴・深度制限）を記録して無限ループを防止します。
 
-#### サブスキル分割によるコンテキスト最適化
+#### Progressive disclosure
 
-メインオーケストレーター（`dev-flow/SKILL.md`）は軽量に保ち、各フェーズの詳細定義は `dev-flow/phase-*.md` にサブスキルとして分離しています。`current_phase` に応じて必要なサブスキルだけを読み込むことで、読み込み負荷を削減し、`/dev-flow:phase-test` のように個別フェーズの直接実行も可能です。
+各 SKILL.md は 500 行以下に保ち、長大なリファレンス（Plan Repair 詳細手順・プロンプト注入仕様など）は `reference/*.md` に分離して必要時のみ読み込みます。Claude Skills の公式ベストプラクティスに沿った構成です。
 
 ---
 
@@ -308,15 +308,8 @@ Phase 5 実装中にエージェントが「計画誤り」を検出した場合
 
 ```
 dev-flow-skills/
-├── dev-flow/                       # メインオーケストレーター（サブスキル方式）
-│   ├── SKILL.md                    # 軽量エントリポイント・状態管理・サブスキル呼び出し
-│   ├── README.md                   # サブスキル構成・モデル構成・コスト最適化の解説
-│   ├── phase-requirements.md       # Phase 1-2 詳細（Opus）
-│   ├── phase-spec.md               # Phase 3-4 詳細（Haiku）
-│   ├── phase-consistency.md        # Phase 4.5 詳細（Haiku）
-│   ├── phase-implementation.md     # Phase 5 詳細（Haiku）
-│   ├── phase-test.md               # Phase 6 詳細（Haiku → Sonnet）
-│   └── phase-compliance.md         # Phase 7-8 詳細（Opus）
+├── dev-flow/                       # メインオーケストレーター
+│   └── SKILL.md                    # 状態管理・フェーズ遷移・サブエージェント起動
 ├── dev-flow-requirements/          # Phase 1-2 スキル
 │   └── SKILL.md                    # 要件定義・曖昧表現リント・用語集生成
 ├── dev-flow-spec/                  # Phase 3-4 スキル
@@ -338,7 +331,10 @@ dev-flow-skills/
 │       ├── checklist-writer.md     # タスクチェックリスト（DAG依存付き）
 │       └── spec-cache-writer.md    # スペックキャッシュ生成
 ├── dev-flow-implementation/        # Phase 5 スキル
-│   ├── SKILL.md                    # 実装オーケストレーター・Plan Repair
+│   ├── SKILL.md                    # 実装オーケストレーター
+│   ├── reference/
+│   │   ├── plan-repair.md          # Plan Repair フロー詳細手順
+│   │   └── agent-prompt-injection.md  # memory注入・ガードレール・昇格通知
 │   └── prompts/                    # エージェントプロンプト（チーム別）
 │       ├── dev-infra.md            # Infra Dev（推論トレース・JSON通知）
 │       ├── dev-app.md              # App Dev（推論トレース・JSON通知）
