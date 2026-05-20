@@ -46,4 +46,35 @@ baseline_commit: `{BASELINE_COMMIT}`
 - コミットメッセージ例: `test: {テスト名} を実装`
 - **チェックリストの更新はしない**（マージ後にオーケストレーターが行う）
 
-**5. 全タスク完了 → `SendMessage(to: "phase-impl-agent", message: "qa-infra-group-{GROUP_N} 実装完了")` で報告する**
+**5. 全タスク完了 → 以下の JSON で SendMessage する:**
+
+完了時には **自己評価フィールド**を必ず含めること。`uncertainty_points` が1件でもある場合は `needs_human_review` を `true` にすること（迷ったら必ず申告する）。
+
+```json
+{
+  "agent": "qa-implementer-infra-group-{GROUP_N}",
+  "status": "completed",
+  "result": {
+    "changed_files": {変更ファイル数},
+    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"]
+  },
+  "confidence": 0.85,
+  "uncertainty_points": [],
+  "needs_human_review": false,
+  "blockers": []
+}
+```
+
+ブロッカー発生時は `status: "blocked"` で報告する:
+
+```json
+{
+  "agent": "qa-implementer-infra-group-{GROUP_N}",
+  "status": "blocked",
+  "blocker_type": "requirement_ambiguity",
+  "reason": "{ブロッカーの内容}",
+  "confidence": 0.3,
+  "needs_human_review": true,
+  "blockers": [{"description": "...", "options": ["選択肢A", "選択肢B"], "recommendation": "推奨案"}]
+}
+```

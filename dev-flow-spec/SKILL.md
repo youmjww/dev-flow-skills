@@ -40,11 +40,50 @@ TeamCreate(name: "doc-team")
 
 プロンプトは `prompts/test-spec-writer.md` を Read ツールで読み込み、プレースホルダー（`{REQUIREMENTS_PATHS}`, `{TEST_SPEC_PATH}`）を実際の値に置換してから Agent に渡してください。
 
+**テスト定義書の frontmatter テンプレート（writer に指示すること）:**
+
+```markdown
+---
+doc_type: test-spec
+covers:
+  - REQ-001
+  - REQ-002
+test_cases:
+  - id: TC-001
+    title: （テストケースタイトル）
+    covers: [REQ-001]
+  - id: TC-002
+    title: （テストケースタイトル）
+    covers: [REQ-001, REQ-002]
+---
+```
+
+要件定義書の `requirements[].id`（REQ-NNN）を参照して `covers` フィールドを埋めること。
+
 ### 3c. API仕様書の生成（IS_API=true の場合）
 
 3b と同時に以下のエージェントを起動（`team_name="doc-team"`, `name="api-spec-writer"`, `run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。
 
 プロンプトは `prompts/api-spec-writer.md` を Read ツールで読み込み、プレースホルダー（`{REQUIREMENTS_PATHS}`, `{API_SPEC_PATH}`, `{tech_stack}`）を実際の値に置換してから Agent に渡してください。
+
+**API仕様書の frontmatter テンプレート（writer に指示すること）:**
+
+```markdown
+---
+doc_type: api-spec
+endpoints:
+  - id: API-001
+    method: POST
+    path: /example
+    covers: [REQ-001]
+  - id: API-002
+    method: GET
+    path: /example/{id}
+    covers: [REQ-002]
+---
+```
+
+要件定義書の `requirements[].id` を参照して `covers` フィールドを埋めること。
 
 ### 3d. インフラ仕様書の生成（IS_INFRA=true の場合）
 

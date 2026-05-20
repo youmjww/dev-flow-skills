@@ -45,10 +45,24 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - テスト定義書を参照し、テストから呼び出しやすいインターフェース設計にする
 
 **2. ブロッカーチェック**
-- 要件の解釈が複数あり判断できない場合は、実装を中断してメインオーケストレーターに報告する：
-  - ブロッカーの内容
-  - 判断が必要な選択肢
-  - 推奨案（あれば）
+- 要件の解釈が複数あり判断できない場合は、実装を中断してメインオーケストレーターに JSON で報告する（step 5 参照）
+- **計画修正が必要な場合**（グループ分けの誤り・依存関係の発見等）は `blocker_type: "plan_repair_needed"` で報告する：
+
+```json
+{
+  "agent": "dev-implementer-app-group-{GROUP_N}",
+  "status": "blocked",
+  "blocker_type": "plan_repair_needed",
+  "reason": "このタスクは Infra グループのリソースに依存しているが、まだマージされていない",
+  "suggested_repair": {
+    "action": "reorder_groups",
+    "description": "Infra グループを先にマージしてから App グループを実行する"
+  },
+  "confidence": 0.4,
+  "needs_human_review": true,
+  "blockers": []
+}
+```
 
 **3. lint / format の実行**（worktree ディレクトリ内で実行）
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する
@@ -57,4 +71,43 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - コミットメッセージ例: `feat: {機能名} を実装`
 - **チェックリストの更新はしない**（マージ後にオーケストレーターが行う）
 
-**5. 全タスク完了 → `SendMessage(to: "phase-impl-agent", message: "dev-app-group-{GROUP_N} 実装完了")` で報告する**
+**5. 全タスク完了 → 以下の JSON で SendMessage する:**
+
+完了時には **自己評価フィールド**を必ず含めること。`uncertainty_points` が1件でもある場合は `needs_human_review` を `true` にすること（迷ったら必ず申告する）。
+
+```json
+{
+  "agent": "dev-implementer-app-group-{GROUP_N}",
+  "status": "completed",
+  "result": {
+    "changed_files": {変更ファイル数},
+    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"]
+  },
+  "confidence": 0.85,
+  "uncertainty_points": [
+    {
+      "topic": "（不確実な判断のトピック）",
+      "reason": "（なぜ迷ったか）",
+      "alternatives_considered": ["選択肢A", "選択肢B"],
+      "chosen": "選択肢A",
+      "rationale": "（選んだ理由）"
+    }
+  ],
+  "needs_human_review": false,
+  "blockers": []
+}
+```
+
+ブロッカー発生時は `status: "blocked"` で報告する:
+
+```json
+{
+  "agent": "dev-implementer-app-group-{GROUP_N}",
+  "status": "blocked",
+  "blocker_type": "requirement_ambiguity",
+  "reason": "{ブロッカーの内容}",
+  "confidence": 0.3,
+  "needs_human_review": true,
+  "blockers": [{"description": "...", "options": ["選択肢A", "選択肢B"], "recommendation": "推奨案"}]
+}
+```
