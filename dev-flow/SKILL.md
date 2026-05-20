@@ -163,6 +163,43 @@ AskUserQuestion で確認：
 
 ファイルが存在しない場合（Phase 4.5 以前）はスキップします。
 
+### STEP 3.5: エージェント階層安全装置の確認
+
+サブエージェントを起動する前に、以下の安全装置を確認します：
+
+**1. 階層深さの上限チェック:**
+
+`state.json` に `agent_hierarchy` セクションが存在する場合、`current_depth` を確認します：
+
+```json
+{
+  "agent_hierarchy": {
+    "max_depth": 4,
+    "current_depth": 1,
+    "stack": ["dev-flow"]
+  }
+}
+```
+
+- `current_depth >= max_depth` → AskUserQuestion で人間に報告してエスカレーション
+- それ以外 → サブエージェント起動時に `current_depth + 1` に更新して `stack` に追加
+
+サブエージェント完了後は `current_depth - 1` に戻し、`stack` から削除します。
+
+**2. 無限ループ検出（Plan Repair / 動的ゲートの組み合わせ時）:**
+
+同一フロー内で同じ `(phase, agent_name)` の組み合わせが5回以上発動していた場合は無限ループの可能性があります。`state.json` の `harness.phase_history` を確認し、同じフェーズが繰り返し記録されていれば AskUserQuestion で人間に確認します。
+
+**3. モデル別デフォルトタイムアウト（参考値）:**
+
+| モデル | 推奨タイムアウト目安 |
+|---|---|
+| haiku | 5分 |
+| sonnet | 15分 |
+| opus | 30分 |
+
+エージェントが推定時間を大幅に超えた場合（Monitor で検出）は、AskUserQuestion で人間に状況を確認します。
+
 ### STEP 4: タスクを作成してサブエージェントを起動
 
 実行するフェーズに対応するタスクを **TaskCreate** で作成してから、サブエージェントを起動します。
