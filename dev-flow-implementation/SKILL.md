@@ -419,7 +419,39 @@ git worktree remove {MAIN_DIR}/../worktree-qa-app-group-N --force
 
 ---
 
-### STEP G: マージ待機
+### STEP G: ドキュメント誤りの集約とマージ待機
+
+**doc_issues の集約（グループ完了後）:**
+
+各エージェントの完了 JSON に `doc_issues` フィールドが含まれている場合、内容を集約してグループ完了時に AskUserQuestion で人間に提示します：
+
+```json
+{
+  "doc_issues": [
+    {
+      "doc": "doc/api-spec/auth.md",
+      "ref_id": "API-001",
+      "issue": "request schema の email フィールドが optional だが要件 REQ-001 では必須",
+      "suggested_fix": "required: [email, password] に変更"
+    }
+  ]
+}
+```
+
+人間の判断：
+- 「ドキュメントを修正する（doc-fix ブランチ）」→ doc-fix フローを実行
+- 「実装側で対応する」→ Dev エージェントに修正を依頼
+- 「無視する」→ そのまま続行
+
+**doc-fix フロー:**
+
+1. `doc-fix/group-N-{issue-slug}` ブランチを作成
+2. 該当ドキュメントを Edit ツールで修正
+3. コミット: `docs: ドキュメント誤り修正 - {issue概要}`
+4. main ブランチへ PR を作成して人間にマージを依頼
+5. マージ後、実装 worktree で `git merge main` して最新ドキュメントを取り込む
+
+**マージ待機:**
 
 AskUserQuestionで人間にPR URLを提示してマージ完了を確認。
 
