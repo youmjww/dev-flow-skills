@@ -51,7 +51,19 @@ baseline_commit: `{BASELINE_COMMIT}`
 
 **重要: 各グループには必ずチーム種別（Infra / App / Cross）を明記すること。**
 
-### グループ 1 (Infra)
+## グループ間依存DAG
+
+グループ間の依存関係を以下のフォーマットで必ず明記すること。依存が無いグループは `depends_on: []` とし、Phase 5 で並列実行される。
+
+```
+- グループ 1 (Infra) — depends_on: []
+- グループ 2 (App)   — depends_on: []
+- グループ 3 (Cross) — depends_on: [group-1, group-2]
+```
+
+**並列実行ルール**: `depends_on` が空のグループ、またはすべての依存先が完了済みのグループは同時起動可能。
+
+### グループ 1 (Infra) — depends_on: []
 
 #### Dev タスク (Infra)
 - [ ] {機能名}: {具体的な実装内容}
@@ -59,7 +71,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 #### QA タスク (Infra)
 - [ ] {テストケース名}: {テストの内容}
 
-### グループ 2 (App)
+### グループ 2 (App) — depends_on: []
 
 #### Dev タスク (App)
 - [ ] {機能名}: {具体的な実装内容}
@@ -67,7 +79,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 #### QA タスク (App)
 - [ ] {テストケース名}: {テストの内容}
 
-### グループ 3 (Cross)
+### グループ 3 (Cross) — depends_on: [group-1, group-2]
 
 #### Dev タスク (Infra)
 - [ ] {インフラ側の実装内容}

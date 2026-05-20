@@ -38,8 +38,17 @@ description: 並列実装フェーズ（Phase 5）を実行します。タスク
 - グループ数を確認する（グループ 1、グループ 2、...）
 - 各グループの Dev タスク・QA タスクを一覧化する
 - **各グループのチーム種別（Infra / App / Cross）を抽出する**（グループ見出しから `(Infra)`, `(App)`, `(Cross)` を読み取る）
+- **各グループの `depends_on` を抽出する**（例: `depends_on: [group-1, group-2]`）
 
-例: `### グループ 1 (Infra)` → `group_types["group-1"] = "Infra"`
+例: `### グループ 1 (Infra) — depends_on: []` → `group_types["group-1"] = "Infra"`, `depends_on["group-1"] = []`
+
+**DAGベース並列実行の初期化:**
+
+`depends_on` を解析して実行可能グループを特定します：
+
+- `depends_on` が空のグループ → **即時実行可能**
+- `depends_on` に完了済みグループがすべて含まれるグループ → **実行可能**
+- 上記以外 → **待機中**
 
 次に `doc/process/state.json` を Read ツールで読み込み、`phase_5_progress` フィールドを確認します。
 
@@ -89,13 +98,37 @@ git branch --show-current
 
 ---
 
-## Phase 5: グループ単位のループ
+## Phase 5: DAGベースのグループ実行ループ
 
-グループ 1 から順に以下を繰り返します。
+DAGの依存関係に従って、実行可能なグループを並列に処理します。
 
 **実行モデル:**
-- **グループ間**: 直列（前グループのマージ完了後に次グループを開始）
+- **グループ間**: DAGベース並列（`depends_on` が解決済みのグループを同時に起動）
 - **グループ内**: 並列（Dev と QA を同時に worktree で実行）
+
+**実行アルゴリズム:**
+
+```
+while 未完了グループが存在する:
+  実行可能グループ = depends_on が全て completed_groups に含まれるグループ
+  実行可能グループ を並列に STEP A〜H まで起動（Background で複数グループ同時進行）
+  いずれかのグループ完了 → completed_groups に追加
+  次の実行可能グループを評価して追加起動
+```
+
+**state.json の `phase_5_progress` に `depends_on` マップを追加:**
+
+```json
+{
+  "phase_5_progress": {
+    "depends_on": {
+      "group-1": [],
+      "group-2": [],
+      "group-3": ["group-1", "group-2"]
+    }
+  }
+}
+```
 
 **worktree 構造:**
 - Dev 用と QA 用で2本の worktree を作成（並列実行のため独立したブランチが必要）
