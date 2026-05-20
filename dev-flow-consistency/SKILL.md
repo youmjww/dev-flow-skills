@@ -1,6 +1,9 @@
 ---
 name: dev-flow-consistency
-description: 整合性チェックフェーズ（Phase 4.5）を実行します。ドキュメント間の矛盾・考慮漏れを検出し、タスクチェックリストとスペックキャッシュを並列生成して設計を凍結します。mode=incrementalの場合は既存コードとの差分のみを抽出します。
+description: AI駆動開発フローの整合性チェックフェーズ（Phase 4.5）。トレーサビリティID整合性とドキュメント間の矛盾を検出し、カバレッジ行列（REQ × TC × API）を生成、タスクを Infra/App/Cross + DAG `depends_on` に分類して設計を凍結します。`mode=incremental` 時は Impact Analysis で baseline_commit 以降の差分のみを抽出します。ドキュメント生成承認後、または `--from=consistency` 起動時に使用します。
+model: haiku
+allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
+paths: doc/process/state.json
 ---
 
 

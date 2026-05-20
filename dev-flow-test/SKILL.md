@@ -1,6 +1,9 @@
 ---
 name: dev-flow-test
-description: テスト実行フェーズ（Phase 6）を実行します。Haikuで最大2回試行し、失敗時は自動的にSonnetに昇格してテストを全通過させます。テストコードは修正せず、プロダクションコードのみを修正する厳密なルールを適用します。E2Eテストにも対応します。
+description: AI駆動開発フローのテスト実行フェーズ（Phase 6）。Haiku で最大 2 回試行し、失敗時は自動的に Sonnet（最大 3 回）に昇格してテストを全通過させます。テストコードは修正せず、プロダクションコードのみを修正する DocDD ルールを適用し、E2E テストにも対応します。Phase 5 実装完了後、または `--from=test` 起動時に使用します。
+model: haiku
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion
+paths: doc/process/state.json
 ---
 
 

@@ -1,6 +1,9 @@
 ---
 name: dev-flow-spec
-description: ドキュメント生成フェーズ（Phase 3-4）を実行します。テスト定義書・API仕様書・インフラ仕様書・UIモックを並列生成し、エージェントレビューと人間レビューを経て承認を得ます。doc-team を使用して複数のwriter/reviewerを協調動作させます。
+description: AI駆動開発フローのドキュメント生成フェーズ（Phase 3-4）。テスト定義書（Gherkin）・API仕様書（OpenAPI 3.1.0）・インフラ仕様書・UIモックを `doc-team` で並列生成し、frontmatter に `covers: [REQ-NNN]` を付与してエージェントレビューと人間レビューを得ます。要件定義承認後の `/dev-flow` 継続時、または `--from=spec` で起動時に使用します。
+model: haiku
+allowed-tools: Read Write Edit Bash TeamCreate SendMessage AskUserQuestion
+paths: doc/process/state.json
 ---
 
 

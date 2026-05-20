@@ -1,6 +1,9 @@
 ---
 name: dev-flow
-description: AI駆動開発フローを管理します。サブエージェント経由で要件定義→ドキュメント生成→整合性チェック→並列実装→テスト→準拠チェックの各フェーズを順次実行します。/dev-flow コマンドで起動します。
+description: AI駆動開発フローのメインオーケストレーター。要件定義→ドキュメント生成→整合性チェック→並列実装→テスト→準拠チェックの全フェーズをサブエージェント経由で順次実行します。新機能を要件定義から実装まで一気通貫で自動化したい時、または `doc/process/state.json` から既存フローを継続したい時に使用します。
+model: haiku
+allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion
+paths: doc/process/state.json
 ---
 
 # 開発フローオーケストレーター
@@ -354,70 +357,6 @@ TaskUpdate(id: "{task_id}", status: "completed")
 ```
 Phase 1-2 完了。要件定義の内容を確認してから `/dev-flow` を実行してください。
 ```
-
----
-
-## フローの全体像
-
-```
-/dev-flow (初回)
-  ↓ TaskCreate("Phase 1-2: 要件定義") → in_progress
-  ↓ Agent(name="phase-requirements-agent", model="opus")
-Phase 1-2: 要件定義
-  → state.json 保存（phase_2） → TaskUpdate(completed)
-  → ✋ 手動確認待ち（要件定義の承認）
-  ↓
-/dev-flow（人間が実行）
-  ↓ [チェックリストなし → STEP 3 スキップ]
-  ↓ TaskCreate("Phase 3-4: ドキュメント生成") → in_progress
-  ↓ Agent(name="phase-spec-agent", model="haiku")
-Phase 3-4: ドキュメント生成
-  doc-orchestrator → SendMessage(to: "phase-spec-agent", "doc-team 全レビュー完了")
-  → state.json 保存（phase_4） → TaskUpdate(completed)
-  → 🤖 自動移行: STEP 2 へ戻る
-  ↓
-  ↓ [チェックリストなし → STEP 3 スキップ]
-  ↓ TaskCreate("Phase 4.5: 整合性チェック") → in_progress
-  ↓ Agent(name="phase-consistency-agent", model="haiku")
-Phase 4.5: 整合性チェック（チェックリスト生成）
-  consistency-orchestrator → SendMessage(to: "phase-consistency-agent", "consistency-team 完了")
-  → state.json 保存（phase_4_5） → TaskUpdate(completed)
-  → checklist フェーズ進捗: 1-2/3-4/4.5 = [x], 5/6/7-8 = [ ]
-  → 🤖 自動移行: STEP 2 へ戻る
-  ↓
-  ↓ [STEP 3: チェックリスト進捗を表示]
-  ↓ TaskCreate("Phase 5: 並列実装") → in_progress
-  ↓ Agent(name="phase-impl-agent", model="haiku")
-Phase 5: 並列実装（git worktree でグループ並列）
-  グループ N ごとに:
-    worktree 作成 → Dev/QA 並列実装
-    dev/qa-implementer → SendMessage(to: "phase-impl-agent", "dev/qa-group-N 実装完了")
-    → エージェントレビュー → PR 作成 → worktree 削除
-    → 人間レビュー・マージ待機 → ブランチ削除
-    → checklist + state.json(phase_5_progress) を1コミットで更新
-  → state.json 保存（phase_5、phase_5_progress 削除） → TaskUpdate(completed)
-  → checklist: Phase 5 → [x]（orchestrator が STEP 5 で更新）
-  → 🤖 自動移行: STEP 2 へ戻る
-  ↓
-  ↓ [STEP 3: チェックリスト進捗を表示]
-  ↓ TaskCreate("Phase 6: テスト実行") → in_progress
-  ↓ Agent(name="phase-test-agent", model="haiku")
-Phase 6: テスト実行
-  → state.json 保存（phase_6） → TaskUpdate(completed)
-  → checklist: Phase 6 → [x]
-  → 🤖 自動移行: STEP 2 へ戻る
-  ↓
-  ↓ [STEP 3: チェックリスト進捗を表示]
-  ↓ TaskCreate("Phase 7-8: 準拠チェック・完了") → in_progress
-  ↓ Agent(name="phase-compliance-agent", model="opus")
-Phase 7-8: 準拠チェック・完了
-  → state.json 削除 → TaskUpdate(completed)
-  → checklist: Phase 7-8 → [x] → 完了
-```
-
-**凡例:**
-- ✋ 手動確認待ち: 人間が `/dev-flow` を実行するまで待機
-- 🤖 自動移行: STEP 2 に戻って次フェーズを自動実行
 
 ---
 
