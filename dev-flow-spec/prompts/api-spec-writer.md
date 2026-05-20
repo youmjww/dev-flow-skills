@@ -9,6 +9,8 @@
 
 **API仕様書フォーマット:**
 
+マークダウンの説明文に加えて、**OpenAPI 3.1.0 形式の YAML を fenced code block として埋め込む**こと。トレーサビリティIDとの連携のために `x-req-id` と `x-api-id` の vendor extension を使用すること。
+
 ```markdown
 # API仕様書
 
@@ -19,21 +21,63 @@
 | メソッド | パス | 概要 |
 |---|---|---|
 
-## エンドポイント詳細
+## OpenAPI仕様
 
-### {METHOD} {path}
-
-**概要**: ...
-
-**リクエスト**
-- ヘッダー:
-- パスパラメータ:
-- クエリパラメータ:
-- ボディ（JSON スキーマ）:
-
-**レスポンス**
-- 成功時（ステータスコード・ボディ）:
-- エラー時（ステータスコード・ボディ）:
+```yaml
+openapi: 3.1.0
+info:
+  title: {API名}
+  version: "1.0.0"
+paths:
+  /example:
+    post:
+      x-req-id: REQ-001
+      x-api-id: API-001
+      summary: （エンドポイント概要）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExampleRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleResponse'
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    ExampleRequest:
+      type: object
+      required: [field1]
+      properties:
+        field1:
+          type: string
+    ExampleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+```
 
 ## 認証・認可
 
