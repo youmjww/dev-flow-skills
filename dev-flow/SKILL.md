@@ -2,6 +2,7 @@
 name: dev-flow
 description: AI駆動開発フローのメインオーケストレーター。要件定義→ドキュメント生成→整合性チェック→並列実装→テスト→準拠チェックの全フェーズをサブエージェント経由で順次実行します。新機能を要件定義から実装まで一気通貫で自動化したい時、または `doc/process/state.json` から既存フローを継続したい時に使用します。
 model: haiku
+# WebSearch / WebFetch はサブエージェント（spec・compliance フェーズ）が技術仕様・ライブラリドキュメントを参照するために必要
 allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion WebSearch WebFetch
 ---
 
@@ -48,6 +49,11 @@ allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion 
       "group-1": "Infra",
       "group-2": "App",
       "group-3": "Cross"
+    },
+    "pr_numbers": {
+      "group-1": 101,
+      "group-2": null,
+      "group-3": null
     }
   }
 }
@@ -113,6 +119,7 @@ git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unk
   - 指定あり → state.json の current_phase を無視して指定フェーズから強制開始（state.json が必要）
   - 指定なし → STEP 2 の current_phase に従う
 - **DRY_RUN**: `--dry-run` フラグ（実際のサブエージェントを起動せず、フロー構成の事前検証のみ行う）
+  - 検出方法: `ARGS に "--dry-run" という文字列が含まれるか` で判定。含まれる場合は `DRY_RUN=true` として以降の処理に引き継ぐ
 
 `--from` の値と対応フェーズ：
 
@@ -136,6 +143,7 @@ git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unk
 4. 実行予定フェーズ・使用モデルの一覧表示
 
 ```
+# 全スキル存在する場合
 [dry-run] 実行計画:
   Phase 1-2: phase-requirements-agent (opus)  ← 下流スキル: 存在 ✓
   Phase 3-4: phase-spec-agent (haiku)          ← 下流スキル: 存在 ✓
@@ -143,6 +151,15 @@ git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unk
   Phase 5:   phase-impl-agent (haiku)          ← 下流スキル: 存在 ✓
   Phase 6:   phase-test-agent (haiku)          ← 下流スキル: 存在 ✓
   Phase 7-8: phase-compliance-agent (opus)     ← 下流スキル: 存在 ✓
+✅ 全スキルファイルの確認完了。/dev-flow で実行できます。
+
+# スキルが欠損している場合（エラー例）
+[dry-run] 実行計画:
+  Phase 1-2: phase-requirements-agent (opus)  ← 下流スキル: 存在 ✓
+  Phase 3-4: phase-spec-agent (haiku)          ← 下流スキル: 欠損 ✗  ~/.claude/skills/dev-flow-spec/SKILL.md が見つかりません
+  Phase 4.5: phase-consistency-agent (haiku)   ← 下流スキル: 存在 ✓
+  ...
+❌ 欠損スキルがあります。setup.sh を実行するか、手動で配置してください。
 ```
 
 ### STEP 1.2: 下流スキルファイルの事前検証
@@ -150,15 +167,20 @@ git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unk
 STEP 1 の直後（`--dry-run` の有無に関わらず）に、使用する全下流スキルファイルの存在を確認する：
 
 ```bash
-ls ~/.claude/skills/dev-flow-requirements/SKILL.md \
-   ~/.claude/skills/dev-flow-spec/SKILL.md \
-   ~/.claude/skills/dev-flow-consistency/SKILL.md \
-   ~/.claude/skills/dev-flow-implementation/SKILL.md \
-   ~/.claude/skills/dev-flow-test/SKILL.md \
-   ~/.claude/skills/dev-flow-compliance/SKILL.md 2>&1
+# 欠損しているファイルのみを出力する（存在するファイルは無視）
+for f in \
+  ~/.claude/skills/dev-flow-requirements/SKILL.md \
+  ~/.claude/skills/dev-flow-spec/SKILL.md \
+  ~/.claude/skills/dev-flow-consistency/SKILL.md \
+  ~/.claude/skills/dev-flow-implementation/SKILL.md \
+  ~/.claude/skills/dev-flow-test/SKILL.md \
+  ~/.claude/skills/dev-flow-compliance/SKILL.md; do
+  [ -f "$f" ] || echo "MISSING: $f"
+done
 ```
 
-存在しないファイルがある場合は、そのフェーズに到達する前に早期エラーとして AskUserQuestion で報告して中断する。`--dry-run` でない場合も同様に実行時より早い段階で検知できる。
+出力が空 → 全スキル存在。フロー続行。  
+`MISSING:` 行が1件以上 → 欠損スキルのパスを AskUserQuestion で人間に報告して中断する。`--dry-run` でない場合も同様に実行時より早い段階で検知できる。
 
 ### STEP 1.5: 開発モードの判定（state.json が存在しない場合のみ）
 
@@ -259,14 +281,20 @@ AskUserQuestion で確認：
 Phase 5 でグループ PR のマージを待機する場合は、以下の Monitor パターンで定期確認します：
 
 ```bash
+# PR番号は state.json の phase_5_progress.pr_numbers.{group} から取得する
+# 例: group-2 の PR 番号を取得
+PR_NUMBER=$(jq -r '.phase_5_progress.pr_numbers["group-2"]' doc/process/state.json)
+
 # PR マージ待機ループ（until で条件成立まで繰り返す）
-until gh pr view {PR番号} --json state --jq '.state' | grep -q MERGED; do
+until gh pr view "$PR_NUMBER" --json state --jq '.state' | grep -q MERGED; do
   sleep 60
 done
-echo "MERGED"
+echo "MERGED: PR #$PR_NUMBER"
 ```
 
 このコマンドを `run_in_background: true` の Bash で起動し、完了通知を受け取るまで他の処理（人間への報告など）を行います。30 分（1800 秒）を超えてもマージされない場合は AskUserQuestion で確認します。
+
+なお、各グループの PR 作成時に `phase_5_progress.pr_numbers.{group}` へ PR 番号を書き込む責任は `phase-impl-agent` にあります。
 
 ### STEP 4: タスクを作成してサブエージェントを起動
 
@@ -491,7 +519,7 @@ Phase 1-2 完了。要件定義の内容を確認してから `/dev-flow` を実
 |---|---|---|
 | 要件の曖昧さ | Phase 1（要件定義からやり直し） | `requirements` |
 | 仕様間の矛盾 | Phase 3-4（ドキュメント生成からやり直し） | `spec` |
-| 技術的制約（実装不可） | Phase 4.5（整合性チェックで修正） | なし（state.json を `phase_4` に戻す） |
+| 技術的制約（実装不可） | Phase 4.5（整合性チェックで修正） | なし（オーケストレーターが `state.json.current_phase` を `"phase_4"` に書き換えてから再実行） |
 | テスト失敗 | Phase 5（対象グループのみ再実装） | `parallel` |
 | その他 | 人間が `/dev-flow --from={適切な値}` で指定 | 人間が判断 |
 
