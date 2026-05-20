@@ -49,7 +49,7 @@ flowchart TD
 | 3-4 ドキュメント生成 | `/dev-flow-spec` | テスト/API/インフラ/モックを並列生成（OpenAPI 3.1.0 / Gherkin） | Haiku（子: Sonnet） |
 | 4.4 Impact Analysis | `/dev-flow-consistency` | incremental mode のみ。差分から影響範囲のタスクを抽出 | Sonnet |
 | 4.5 整合性チェック | `/dev-flow-consistency` | ID整合性・カバレッジ行列・DAG分類・設計凍結 | Haiku（子: Opus） |
-| 5 並列実装 | `/dev-flow-implementation` | DAG依存解決・並列実装・推論トレース・Plan Repair | Haiku → Sonnet |
+| 5 並列実装 | `/dev-flow-implementation` | DAG依存解決・並列実装・推論トレース・Plan Repair | Sonnet → Opus |
 | 6 テスト実行 | `/dev-flow-test` | 自動モデル昇格でテスト全通過 | Haiku → Sonnet |
 | 7-8 準拠チェック | `/dev-flow-compliance` | カバレッジ行列で機械検証・完了報告 | Opus 4.7 |
 
@@ -151,16 +151,16 @@ flowchart LR
 
 #### 自動モデル昇格（実装・レビュー）
 
-初回は Haiku で実装し、設計レベルの指摘が出たら Sonnet に昇格、それでも解決不能なら人間にエスカレーションします。
+初回は Sonnet で実装し、設計レベルの指摘が出たら Opus に昇格、それでも解決不能なら人間にエスカレーションします。
 
 ```mermaid
 flowchart TD
     Start([初回実装])
-    Start --> Haiku{"Haiku<br/>最大2回修正"}
-    Haiku -->|通過| Review([レビューへ])
-    Haiku -->|設計レベルの指摘| Sonnet{"Sonnet に昇格<br/>最大3回"}
-    Sonnet -->|通過| Review
-    Sonnet -->|解決不能| Human([人間にエスカレーション])
+    Start --> Sonnet{"Sonnet<br/>最大2回修正"}
+    Sonnet -->|通過| Review([レビューへ])
+    Sonnet -->|設計レベルの指摘| Opus{"Opus に昇格<br/>最大3回"}
+    Opus -->|通過| Review
+    Opus -->|解決不能| Human([人間にエスカレーション])
 ```
 
 #### セッションをまたぐ状態管理
@@ -356,8 +356,8 @@ dev-flow-skills/
 | Phase 3-4 ドキュメント生成 | dev-flow-spec | Haiku 4.5（子: Sonnet） |
 | Phase 4.4 Impact Analysis | dev-flow-consistency | Sonnet |
 | Phase 4.5 整合性チェック | dev-flow-consistency | Haiku 4.5（整合性チェック子: Opus） |
-| Phase 5 実装 | dev-flow-implementation | Haiku → Sonnet（自動昇格） |
-| Phase 5 レビュー | dev-flow-implementation | Haiku → Sonnet（disallowed_tools 付き） |
+| Phase 5 実装 | dev-flow-implementation | Sonnet → Opus（自動昇格） |
+| Phase 5 レビュー | dev-flow-implementation | Opus（昇格ラダーなし・初回から最高品質） |
 | Phase 6 テスト | dev-flow-test | Haiku → Sonnet（自動昇格） |
 | Phase 7-8 準拠チェック | dev-flow-compliance | Opus 4.7 |
 
