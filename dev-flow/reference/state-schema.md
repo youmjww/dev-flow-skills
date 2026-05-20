@@ -67,13 +67,27 @@
 |---|---|
 | `current_phase` | 次に実行するフェーズ。`null` または欠損 = Phase 1 から開始 |
 | `mode` | `"full"`（新規）/ `"incremental"`（差分のみ） |
-| `baseline_commit` | incremental 時のみ設定。**Phase 5 完了時に最新 HEAD で更新すること** |
+| `baseline_commit` | `incremental` 時のみ設定。設定主体・更新主体・参照範囲は下記「baseline_commit のライフサイクル」を参照 |
 | `tech_stack` | 言語・フレームワーク等。Phase 3 以降のサブエージェントが参照 |
 | `is_gui/is_api/is_infra/is_e2e` | 対応するフェーズを有効化するフラグ |
 | `phase_5_progress` | Phase 5 実行中のみ存在。完了時に削除 |
 | `phase_5_progress.pr_numbers` | 各グループの PR 番号。PR 作成後に phase-impl-agent が書き込む |
 | `agent_hierarchy` | 階層深さ監視。max_depth=4 を超えたらエスカレーション |
 | `harness` | 再現性メタデータ。Phase 1 開始時に追加、各フェーズ完了時に phase_history を更新 |
+
+## baseline_commit のライフサイクル
+
+`mode = "incremental"` の差分計算に使うコミット SHA。誰が読み・書きするかを明確にする：
+
+| タイミング | アクター | 動作 |
+|---|---|---|
+| 初期設定 | `dev-flow` オーケストレーター（STEP 1.5） | `incremental` モード確定時に `git rev-parse HEAD` を `baseline_commit` に記録 |
+| Phase 4.4 | `phase-consistency-agent`（Impact Analysis） | `git diff $baseline_commit...HEAD -- doc/` で要件差分を抽出。**書き換えない** |
+| Phase 5 開始時 | `phase-impl-agent` | 実装範囲決定のために参照。**書き換えない** |
+| Phase 5 完了時 | `phase-impl-agent` | 全グループの PR がマージされた後、`git rev-parse HEAD`（=ベースブランチの最新 HEAD）を `baseline_commit` に書き戻して state.json を保存 |
+| Phase 6 / Phase 7-8 | 参照しない | テスト・準拠チェックは `baseline_commit` に依存しない |
+
+`full` モードでは `baseline_commit = null` 固定。すべてのアクターは null を見たら「全範囲対象」と解釈する。
 
 ## skill_versions の取得
 
