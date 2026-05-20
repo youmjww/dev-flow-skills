@@ -60,7 +60,16 @@ TeamCreate(name: "consistency-team")
 
 ---
 `checklist-writer` からの「checklist 生成完了」通知と、`spec-cache-writer` からの「spec-cache 生成完了」通知を待ってください。
-両方揃ったら、`SendMessage(to: "phase-consistency-agent", message: "consistency-team 完了")` で報告してください。
+両方揃ったら、以下の JSON で報告してください：
+
+```
+SendMessage(
+  to: "phase-consistency-agent",
+  message: '{"agent":"consistency-orchestrator","status":"completed","result":{"generated":["task_checklist","spec_cache"]},"blockers":[]}'
+)
+```
+
+パース失敗に備えたフォールバックとして、JSON が生成できない場合は `"consistency-team 完了"` のフリーテキストで送信してください。
 
 ---
 

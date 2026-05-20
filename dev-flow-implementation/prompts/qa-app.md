@@ -45,4 +45,23 @@ baseline_commit: `{BASELINE_COMMIT}`
 - コミットメッセージ例: `test: {テスト名} を実装`
 - **チェックリストの更新はしない**（マージ後にオーケストレーターが行う）
 
-**5. 全タスク完了 → `SendMessage(to: "phase-impl-agent", message: "qa-app-group-{GROUP_N} 実装完了")` で報告する**
+**5. 全タスク完了 → 以下の JSON で SendMessage する:**
+
+```
+SendMessage(
+  to: "phase-impl-agent",
+  message: '{"agent":"qa-implementer-app-group-{GROUP_N}","status":"completed","result":{"changed_files":{変更ファイル数},"commits":[{コミットハッシュ一覧を文字列配列で}]},"blockers":[]}'
+)
+```
+
+ブロッカー発生時は `status: "blocked"` で報告する:
+
+```json
+{
+  "agent": "qa-implementer-app-group-{GROUP_N}",
+  "status": "blocked",
+  "blocker_type": "requirement_ambiguity",
+  "reason": "{ブロッカーの内容}",
+  "blockers": [{"description": "...", "options": ["選択肢A", "選択肢B"], "recommendation": "推奨案"}]
+}
+```

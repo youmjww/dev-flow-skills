@@ -12,4 +12,13 @@ IS_API: `{IS_API}`
 IS_INFRA: `{IS_INFRA}`
 IS_GUI: `{IS_GUI}`
 
-すべての通知が揃ったら、`SendMessage(to: "phase-spec-agent", message: "doc-team 全レビュー完了")` でこのスキルを実行している主体（phase-spec-agent）に報告してください。
+すべての通知が揃ったら、以下の JSON で報告してください：
+
+```
+SendMessage(
+  to: "phase-spec-agent",
+  message: '{"agent":"doc-orchestrator","status":"completed","result":{"docs_reviewed":["test-spec",(IS_API=trueなら"api-spec"),(IS_INFRA=trueなら"infra-spec"),(IS_GUI=trueなら"mock")]},"blockers":[]}'
+)
+```
+
+パース失敗に備えたフォールバックとして、JSON が生成できない場合は `"doc-team 全レビュー完了"` のフリーテキストで送信してください。
