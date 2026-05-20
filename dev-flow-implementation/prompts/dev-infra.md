@@ -54,7 +54,19 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
-- コミットメッセージ例: `feat: {機能名} を実装`
+
+コミットメッセージには必ず `Implements:` と `Tests:` フッターを含めること：
+
+```
+feat: {機能名} を実装
+
+Implements: REQ-001, INFRA-001
+Tests: TC-001, TC-002
+```
+
+- `Implements:` に実装対象の REQ-ID と API-ID / INFRA-ID を記載
+- `Tests:` に対応するテストケース TC-ID を記載（テストが存在する場合）
+- ID が不明な場合はタスクチェックリストまたはスペックキャッシュを参照
 - **チェックリストの更新はしない**（マージ後にオーケストレーターが行う）
 
 **5. 全タスク完了 → `SendMessage(to: "phase-impl-agent", message: "dev-infra-group-{GROUP_N} 実装完了")` で報告する**
