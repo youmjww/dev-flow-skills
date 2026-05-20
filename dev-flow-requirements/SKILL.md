@@ -74,11 +74,30 @@ AskUserQuestion ツールで選択肢を提示します：
 **要件定義書フォーマット:**
 
 ```markdown
+---
+doc_type: requirements
+doc_id: REQ-DOC-001
+requirements:
+  - id: REQ-001
+    title: （要件タイトル）
+    priority: must  # must / should / could
+  - id: REQ-002
+    title: （要件タイトル）
+    priority: should
+---
+
 # 要件定義書
 
 ## 概要
 ## 技術スタック
 ## 機能要件
+
+### REQ-001: （要件タイトル）
+（本文）
+
+### REQ-002: （要件タイトル）
+（本文）
+
 ## 非機能要件
 ## API / インターフェース定義
 ## エラーハンドリング
@@ -87,6 +106,18 @@ AskUserQuestion ツールで選択肢を提示します：
 - ユニットテスト: {test_framework}
 - E2E テスト: {e2e_framework または "なし"}
 ```
+
+**ID 採番規則:**
+
+| 種別 | フォーマット | 例 |
+|---|---|---|
+| 要件 | `REQ-NNN`（3桁ゼロ埋め） | `REQ-001`, `REQ-042` |
+| テストケース | `TC-NNN` | `TC-001`, `TC-023` |
+| API エンドポイント | `API-NNN` | `API-001` |
+| インフラリソース | `INFRA-NNN` | `INFRA-001` |
+| 要件定義書ドキュメント | `REQ-DOC-NNN` | `REQ-DOC-001` |
+
+複数の要件定義書が存在する場合は `doc_id` を `REQ-DOC-002` のように連番で付与し、`requirements` の ID は全ドキュメントを通じて一意にすること（同一 ID を複数ドキュメントに使わない）。
 
 ### tech_stack と GUI フラグの確定
 
