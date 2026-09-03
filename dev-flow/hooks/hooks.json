@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "$HOME/.claude/skills/dev-flow/hooks/session-start.sh",
-            "timeout": 10,
+            "timeout": 30,
             "statusMessage": "dev-flow 状態確認"
           }
         ]
@@ -21,6 +21,17 @@
             "command": "$HOME/.claude/skills/dev-flow/hooks/pre-agent-check.sh",
             "timeout": 10,
             "statusMessage": "dev-flow 起動前検証"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/pr-merge-guard.sh",
+            "timeout": 60,
+            "statusMessage": "dev-flow 自動マージ条件検証"
           }
         ]
       }

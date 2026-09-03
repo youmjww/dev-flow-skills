@@ -1,0 +1,122 @@
+#!/bin/bash
+# PreToolUse (matcher: Bash)
+# `gh pr merge` を捕まえ、自動マージ条件を機械的に検証する。プロンプトの指示では緩和できない。
+#
+#   常に拒否:   ベースが main / master / develop / release/* / hotfix/*
+#   許可条件:   すべて満たすこと
+#     - ベースが DEV_FLOW_AUTO_MERGE_BASE_PATTERN（既定 ^feature/）に一致し、
+#       state.json.phase_5_progress.base_branch があればそれと一致
+#     - PR が OPEN かつ Draft でない
+#     - mergeable == MERGEABLE（コンフリクトなし）
+#     - CI チェックがすべて成功（チェックが 1 つも無ければ拒否）
+#     - diff に DB の破壊的変更が含まれない（db-destructive-patterns.txt）
+#     - マージ方式は --merge のみ（--squash / --rebase / --auto / --admin は拒否）
+#     - 1 コマンドにつき 1 PR、番号または URL で明示
+#
+# `gh pr merge` を含まないコマンドでは何もしない。
+
+source "$(dirname "$0")/lib.sh"
+
+[ "$(jqi '.tool_name')" = "Bash" ] || exit 0
+CMD="$(jqi '.tool_input.command // empty')"
+printf '%s' "$CMD" | grep -qE 'gh[[:space:]]+pr[[:space:]]+merge' || exit 0
+
+PATTERNS="$(dirname "$0")/db-destructive-patterns.txt"
+BASE_PATTERN="${DEV_FLOW_AUTO_MERGE_BASE_PATTERN:-^feature/}"
+PROTECTED='^(main|master|develop|release/.*|hotfix/.*)$'
+
+# ---- コマンド形式 ----
+if [ "$(printf '%s' "$CMD" | grep -oE 'gh[[:space:]]+pr[[:space:]]+merge' | wc -l)" -ne 1 ]; then
+  deny "dev-flow hook: gh pr merge は 1 コマンドにつき 1 PR にしてください。"
+fi
+
+MERGE_ARGS="$(printf '%s' "$CMD" | sed -E 's/.*gh[[:space:]]+pr[[:space:]]+merge[[:space:]]*//; s/[[:space:]]*(&&|\|\||;|\|).*$//')"
+
+if printf ' %s ' "$MERGE_ARGS" | grep -qE -- '[[:space:]](--squash|-s|--rebase|-r|--auto|--admin|--disable-auto)[[:space:]]'; then
+  deny "dev-flow hook: 自動マージで許可される方式は --merge のみです（--squash / --rebase / --auto / --admin は拒否）。"
+fi
+if ! printf ' %s ' "$MERGE_ARGS" | grep -qE -- '[[:space:]](--merge|-m)[[:space:]]'; then
+  deny "dev-flow hook: gh pr merge には --merge を明示してください（マージコミット方式のみ許可）。"
+fi
+
+PR=""
+for tok in $MERGE_ARGS; do
+  case "$tok" in -*) continue ;; esac
+  PR="$tok"
+  break
+done
+case "$PR" in
+  *://*/pull/*) PR="${PR##*/pull/}"; PR="${PR%%[^0-9]*}" ;;
+esac
+if ! printf '%s' "$PR" | grep -qE '^[0-9]+$'; then
+  deny "dev-flow hook: マージ対象の PR を番号（または URL）で明示してください。カレントブランチ推定やブランチ名指定は拒否します。"
+fi
+
+# ---- PR 情報 ----
+command -v gh >/dev/null 2>&1 || deny "dev-flow hook: gh コマンドが見つからないため自動マージ条件を検証できません。"
+
+INFO="$(gh pr view "$PR" --json number,state,isDraft,baseRefName,headRefName,mergeable,statusCheckRollup,url 2>&1)" \
+  || deny "dev-flow hook: gh pr view $PR に失敗しました: $INFO"
+
+pv() { printf '%s' "$INFO" | jq -r "$1"; }
+PR_STATE="$(pv '.state')"
+DRAFT="$(pv '.isDraft')"
+BASE="$(pv '.baseRefName')"
+HEAD_REF="$(pv '.headRefName')"
+MERGEABLE="$(pv '.mergeable')"
+URL="$(pv '.url')"
+
+[ "$PR_STATE" = "OPEN" ] || deny "dev-flow hook: PR #$PR は $PR_STATE です（OPEN のみマージ可）。"
+[ "$DRAFT" != "true" ] || deny "dev-flow hook: PR #$PR は Draft です。Ready for review にしてから再試行してください。"
+
+# ---- ベースブランチ ----
+if printf '%s' "$BASE" | grep -qE "$PROTECTED"; then
+  deny "dev-flow hook: PR #$PR のベース '$BASE' は保護ブランチです。main / develop 系へのマージは常に人間が行います。$URL"
+fi
+if ! printf '%s' "$BASE" | grep -qE "$BASE_PATTERN"; then
+  deny "dev-flow hook: PR #$PR のベース '$BASE' は自動マージ対象（$BASE_PATTERN）ではありません。人間にマージを依頼してください。$URL"
+fi
+if state_valid; then
+  EXPECTED_BASE="$(state_get '.phase_5_progress.base_branch')"
+  if [ -n "$EXPECTED_BASE" ] && [ "$EXPECTED_BASE" != "$BASE" ]; then
+    deny "dev-flow hook: PR #$PR のベース '$BASE' が state.json の base_branch '$EXPECTED_BASE' と一致しません。"
+  fi
+fi
+
+# ---- コンフリクト ----
+[ "$MERGEABLE" = "MERGEABLE" ] || deny "dev-flow hook: PR #$PR は mergeable=$MERGEABLE です（コンフリクトまたは判定中）。解消後に再試行してください。$URL"
+
+# ---- CI ----
+CHECKS="$(pv '
+  .statusCheckRollup
+  | if length == 0 then "NONE"
+    else (
+      map(
+        if .__typename == "CheckRun" then
+          (if .status == "COMPLETED" and ((.conclusion // "") | IN("SUCCESS","NEUTRAL","SKIPPED")) then empty else (.name // "check") + "=" + ((.conclusion // .status) // "PENDING") end)
+        else
+          (if .state == "SUCCESS" then empty else (.context // "status") + "=" + (.state // "PENDING") end)
+        end
+      ) | if length == 0 then "OK" else join(", ") end
+    ) end')"
+case "$CHECKS" in
+  OK) ;;
+  NONE) deny "dev-flow hook: PR #$PR に CI チェックがありません。CI が無い PR は自動マージしません。$URL" ;;
+  *) deny "dev-flow hook: PR #$PR の CI が通っていません: $CHECKS。$URL" ;;
+esac
+
+# ---- DB 破壊的変更 ----
+DIFF="$(gh pr diff "$PR" 2>/dev/null)" || deny "dev-flow hook: gh pr diff $PR に失敗しました。"
+ADDED="$(printf '%s\n' "$DIFF" | grep -E '^\+[^+]' || true)"
+HITS="$(printf '%s\n' "$ADDED" | grep -iE -f <(grep -vE '^\s*(#|$)' "$PATTERNS") | head -5 || true)"
+# WHERE 句の無い DELETE FROM（全行削除）
+DEL_ALL="$(printf '%s\n' "$ADDED" | grep -iE 'DELETE[[:space:]]+FROM[[:space:]]' | grep -ivE '[[:space:]]WHERE[[:space:]]' | head -5 || true)"
+HITS="$(printf '%s\n%s' "$HITS" "$DEL_ALL" | sed '/^$/d')"
+TF_DEL="$(printf '%s\n' "$DIFF" | grep -E '^-[^-]' | grep -E 'resource[[:space:]]+"(aws_(db_instance|rds_cluster|rds_cluster_instance|dynamodb_table|elasticache_cluster|elasticache_replication_group|redshift_cluster|docdb_cluster|neptune_cluster)|google_sql_database_instance|azurerm_(mssql|postgresql|mysql)_[a-z_]*server)"' | head -5 || true)"
+if [ -n "$HITS" ] || [ -n "$TF_DEL" ]; then
+  deny "dev-flow hook: PR #$PR に DB の破壊的変更が含まれています。人間がレビューしてマージしてください。$URL
+$(printf '%s\n%s' "$HITS" "$TF_DEL" | sed '/^$/d' | sed 's/^/  /')"
+fi
+
+log_flow "event=auto_merge_allowed pr=$PR base=$BASE head=$HEAD_REF"
+allow "dev-flow hook: PR #$PR（$HEAD_REF → $BASE）は自動マージ条件（CI 全通過・コンフリクトなし・DB 破壊的変更なし・--merge）を満たしています。"

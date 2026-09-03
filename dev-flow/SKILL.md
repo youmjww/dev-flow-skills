@@ -33,6 +33,7 @@ allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion 
 | `state.json` 書き込み後 | `state-sync.sh` | JSON 不正なら exit 2 で差し戻し。`task_checklist.md` の「フェーズ進捗」を `current_phase` に同期（STEP 5-2 の自動化）。`flow.log` に遷移を記録 |
 | `escalation_*.md` 生成後 | `state-sync.sh` | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` 設定時は Slack 通知 |
 | `phase-*-agent` 完了後 | `agent-complete.sh` | `flow.log` に完了・所要時間を記録。Phase 2 完了時は人間確認ゲートを念押し |
+| `gh pr merge` 実行前 | `pr-merge-guard.sh` | 自動マージ条件（ベースブランチ・CI・コンフリクト・DB 破壊的変更・`--merge`）を検証し、満たさなければ `deny`。`main` / `develop` 向けは常に拒否 |
 | セッション開始 / 応答完了 | `session-start.sh` / `stop-summary.sh` | 進行中フローの現在フェーズと次アクションを表示 |
 
 hook からの `additionalContext` に「task_checklist.md のフェーズ進捗は自動同期済み」とあれば STEP 5-2 の Edit をスキップする。`deny` / `ask` された場合は理由を人間に伝え、勝手に回避策を取らない。
@@ -213,20 +214,36 @@ Agent(
 | フェーズ | 並列実行可否 | run_in_background |
 |---|---|---|
 | Phase 1-2〜4.5 | 不可（直列） | false |
-| Phase 5 各グループ | グループ間は可 | PR マージ待機中のみ true |
+| Phase 5 各グループ | グループ間は可 | false（PR マージは待たずに終了して再入する） |
 | Phase 6〜7-8 | 不可（直列） | false |
 
 Phase 5 で並列化する場合は `active_worktrees` に追加し SendMessage 完了通知を待つ。Cross グループは直列。
 
-**Phase 5 PR マージ待機の責任分担:**
+**Phase 5 PR マージの責任分担（非ブロッキング）:**
+
+オーケストレーターは PR のマージを**待たない**（`sleep` ポーリング禁止）。マージ待ちが発生したらフローを終了し、次回 `/dev-flow` 起動時に状態を確認して続きを進める。
 
 | アクター | 責任 |
 |---|---|
-| `phase-impl-agent`（サブエージェント） | グループの実装完了後に `gh pr create` で PR を作成し、PR 番号を `phase_5_progress.pr_numbers["group-N"]` へ書き込んでから完了通知を返す |
-| `dev-flow` オーケストレーター | 完了通知を受けたら `pr_numbers` を読み、`gh pr view <N> --json state` を60秒間隔でポーリング。`MERGED` を確認したら `completed_groups` に追加し、依存解決済みの次グループを起動 |
-| 人間 | PR レビュー・マージ。30分経過してもマージされない場合は AskUserQuestion で確認する |
+| `phase-impl-agent`（サブエージェント） | グループの実装完了後に `gh pr create` で PR を作成し、番号を `phase_5_progress.pr_numbers["group-N"]`（**配列**。1 グループ 2〜4 PR）へ記録。続けて各 PR に `gh pr merge <N> --merge` を試行する。hook（`pr-merge-guard.sh`）が自動マージ条件を検証し、満たさなければ deny される。全 PR がマージ済みになったグループは STEP H で `completed_groups` へ追加。deny された PR が残るグループは「人間マージ待ち」とし、依存の無い他グループがあれば続行、無ければ人間に PR URL と deny 理由を提示して**終了**する |
+| `dev-flow` オーケストレーター | `current_phase = "phase_4_5"` で `phase_5_progress` が残っていればそのまま `phase-impl-agent` を起動する（PR 状態の確認と取り込みは impl 側の再開処理が行う）。自分で `gh pr view` をポーリングしない |
+| 人間 | 自動マージ条件を満たさない PR のレビュー・マージ。`main` / `develop` 向け PR は常に人間がマージする |
 
-マージは**人間が手動で実施する前提**。オーケストレーターが自動マージすることは無い（`gh pr merge` を発行しない）。詳細は `~/.claude/skills/dev-flow/reference/state-schema.md` の「Phase 5 PR マージ待機ロジック」を参照。
+**自動マージ条件（hook が機械的に検証する。プロンプトで緩和できない）:**
+
+- ベースブランチが `feature/*`（`DEV_FLOW_AUTO_MERGE_BASE_PATTERN` で変更可）で、`state.json.phase_5_progress.base_branch` と一致する。`main` / `master` / `develop` / `release/*` / `hotfix/*` は無条件で拒否
+- CI チェックがすべて成功している（チェックが 1 つも無い PR は拒否）
+- `mergeable == MERGEABLE`（コンフリクトなし）
+- PR の diff に DB の破壊的変更が含まれない（DROP / TRUNCATE / カラム削除・型変更・リネーム、ORM マイグレーションの remove / rename / alter 系、Terraform の DB リソース削除や `skip_final_snapshot = true` 等。パターンは `hooks/db-destructive-patterns.txt`）
+- マージ方式は `--merge` のみ。`--squash` / `--rebase` / `--auto` / `--admin` は拒否。1 コマンド 1 PR、番号または URL で明示
+
+**hook 未導入環境では自動マージを行わない。** 起動時に以下で判定し、登録が無ければ `gh pr merge` を一切発行せず人間に委ねる：
+
+```bash
+jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/settings.json >/dev/null 2>&1 && echo "auto-merge: enabled" || echo "auto-merge: disabled"
+```
+
+詳細は `~/.claude/skills/dev-flow/reference/state-schema.md` の「Phase 5 PR マージ待機ロジック」を参照。
 
 ### STEP 5: タスク完了 & チェックリスト更新 & 次フェーズへの移行判定
 

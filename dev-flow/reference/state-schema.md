@@ -39,9 +39,9 @@
       "group-3": "Cross"
     },
     "pr_numbers": {
-      "group-1": 101,
-      "group-2": null,
-      "group-3": null
+      "group-1": [101, 102],
+      "group-2": [103, 104],
+      "group-3": []
     }
   },
   "agent_hierarchy": {
@@ -71,7 +71,7 @@
 | `tech_stack` | 言語・フレームワーク等。Phase 3 以降のサブエージェントが参照 |
 | `is_gui/is_api/is_infra/is_e2e` | 対応するフェーズを有効化するフラグ |
 | `phase_5_progress` | Phase 5 実行中のみ存在。完了時に削除 |
-| `phase_5_progress.pr_numbers` | 各グループの PR 番号。PR 作成後に phase-impl-agent が書き込む |
+| `phase_5_progress.pr_numbers` | 各グループの PR 番号の**配列**（Infra/App は 2 本、Cross は 4 本）。PR 作成後に phase-impl-agent が書き込む。`completed_groups` に含まれないグループの番号が「マージ待ち」を表す |
 | `agent_hierarchy` | 階層深さ監視。max_depth=4 を超えたらエスカレーション |
 | `harness` | 再現性メタデータ。Phase 1 開始時に追加、各フェーズ完了時に phase_history を更新 |
 
@@ -97,19 +97,24 @@ git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unk
 
 ## Phase 5 PR マージ待機ロジック
 
-`completed_groups` への追加タイミングは「PR マージ後」。待機方針：
+`completed_groups` への追加タイミングは「グループの全 PR がマージされた後」。**待機はしない**（`sleep` ポーリング禁止）。
 
 | 状況 | 動作 |
 |---|---|
-| PR が Open | `pr_numbers` から番号を取得してポーリング（60秒間隔） |
-| マージ確認後 | `completed_groups` に追加して次グループへ |
-| 30分経過 | AskUserQuestion で人間に確認 |
+| PR 作成直後 | 各 PR に `gh pr merge <N> --merge` を試行。hook `pr-merge-guard.sh` が条件を検証し、満たさなければ deny |
+| グループの全 PR が MERGED | STEP H を実行して `completed_groups` に追加、依存解決済みの次グループへ |
+| deny された PR が残る | 依存の無い他グループがあれば続行。無ければ PR URL と deny 理由を人間に提示して phase-impl-agent を**終了** |
+| 次回 `/dev-flow` 起動時 | phase-impl-agent の再開処理が `pr_numbers` のうち未完了グループの PR を `gh pr view` で確認。全 MERGED → STEP H。OPEN → 再度 `gh pr merge` を試行 |
 | 新グループ追加 | 非対応。Phase 4.5 からやり直し |
 
-PR 番号取得例：
+マージ待ち PR の一覧は SessionStart hook（`session-start.sh`）がセッション開始時に表示する。
+
+未完了グループの PR 状態確認例：
 ```bash
-PR_NUMBER=$(jq -r '.phase_5_progress.pr_numbers["group-2"]' doc/process/state.json)
-until gh pr view "$PR_NUMBER" --json state --jq '.state' | grep -q MERGED; do
-  sleep 60
-done
+jq -r '.phase_5_progress as $p | ($p.pr_numbers // {}) | to_entries[]
+  | select(.key as $g | ($p.completed_groups // []) | index($g) | not)
+  | "\(.key) \(.value | join(" "))"' doc/process/state.json \
+| while read -r group nums; do
+    for n in $nums; do echo "$group #$n $(gh pr view "$n" --json state --jq .state)"; done
+  done
 ```

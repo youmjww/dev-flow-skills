@@ -57,6 +57,10 @@ paths: doc/process/state.json
 
 **`phase_5_progress` が存在する場合（前回の中断あり）:**
 
+0. **マージ待ち PR の取り込み**: `pr_numbers` に番号があり `completed_groups` に無いグループについて、各 PR を `gh pr view <N> --json state,url` で確認する
+   - グループの全 PR が `MERGED` → そのグループの STEP H（クリーンアップ・`completed_groups` 追加）を実行
+   - `OPEN` の PR がある → STEP G の自動マージ試行を再実行。それでも deny された場合はそのグループを「人間マージ待ち」として扱う
+   - `CLOSED`（マージされずに閉じられた）→ AskUserQuestion で人間に確認（再作成 / グループをやり直す）
 1. `completed_groups` を確認 → 完了済みグループはスキップ対象に記録
 2. `active_worktrees` を確認 → 残存 worktree があれば以下でクリーンアップ：
    ```bash
@@ -92,12 +96,13 @@ git branch --show-current
       "group-1": "Infra",
       "group-2": "App",
       "group-3": "Cross"
-    }
+    },
+    "pr_numbers": {}
   }
 }
 ```
 
-`group_types` は 5-pre-a で抽出したチーム種別をすべて記録します
+`group_types` は 5-pre-a で抽出したチーム種別をすべて記録します。`pr_numbers` は STEP E で PR を作成するたびに `"group-N": [番号, ...]` を追記します
 
 ---
 
@@ -333,6 +338,13 @@ PRタイトル例:
 - `feat(infra): グループ N Infra Dev タスク実装`
 - `test(infra): グループ N Infra QA タスク実装`
 
+PR のベースブランチは `phase_5_progress.base_branch`（`--base` で明示する）。作成した PR 番号はすべて `state.json` の `phase_5_progress.pr_numbers["group-N"]` に**配列**で記録する：
+
+```bash
+gh pr create --base "$BASE_BRANCH" --head dev/infra-group-N --title "..." --body "..." --label infra
+# → 出力 URL の末尾番号を pr_numbers["group-N"] に append
+```
+
 ---
 
 ### STEP F: worktreeクリーンアップ
@@ -387,18 +399,32 @@ git worktree remove {MAIN_DIR}/../worktree-qa-app-group-N --force
 4. main ブランチへ PR を作成して人間にマージを依頼
 5. マージ後、実装 worktree で `git merge main` して最新ドキュメントを取り込む
 
-**マージ待機:**
+**自動マージ試行（非ブロッキング）:**
 
-AskUserQuestionで人間にPR URLを提示してマージ完了を確認。
+マージを**待たない**。まず hook の有無を確認する：
 
-- 「マージしました」→ STEP H へ
-- 「修正が必要」→ worktreeを再作成して修正・再push後に再度待機
+```bash
+jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/settings.json >/dev/null 2>&1 && echo enabled || echo disabled
+```
+
+- `disabled` → `gh pr merge` を発行せず、PR URL を人間に提示して phase-impl-agent を終了する（マージ後に `/dev-flow` で再入）
+- `enabled` → グループの各 PR に対して 1 コマンドずつ `gh pr merge <N> --merge --delete-branch` を実行する。hook `pr-merge-guard.sh` が自動マージ条件（ベースが `feature/*` かつ `base_branch` と一致・CI 全通過・コンフリクトなし・DB 破壊的変更なし）を検証し、満たさなければ deny される
+
+結果の扱い：
+
+| 結果 | 動作 |
+|---|---|
+| グループの全 PR がマージされた | STEP H へ |
+| 一部または全部が deny された | deny 理由を記録し、そのグループを「人間マージ待ち」とする。依存の無い他グループがあれば続行、無ければ人間に「以下の PR は自動マージ条件を満たしません。レビュー・マージ後に `/dev-flow` を実行してください」と PR URL・理由を提示して**終了** |
+| CI が `PENDING` で deny された | 待たずに上記と同じ扱い（次回 `/dev-flow` の再開処理が再試行する） |
+
+deny を回避する目的で `--admin` / `--auto` / `--squash` を試したり、条件を満たすようにファイルを削って再 push したりしてはならない。
 
 ---
 
 ### STEP H: マージ後クリーンアップ
 
-マージ確認後：
+グループの全 PR が `MERGED` であることを `gh pr view <N> --json state` で確認した後（自動マージ直後、または再開処理での取り込み時）：
 
 1. ローカル・リモートブランチを削除：
    - Infra: `dev/infra-group-N`, `qa/infra-group-N`
