@@ -11,7 +11,7 @@ git clone git@github.com:youmjww/dev-flow-skills.git ~/dev-flow-skills
 bash ~/dev-flow-skills/setup.sh
 ```
 
-`~/.claude/skills/` に各スキルへのシンボリックリンクが作成されます。あとは Claude Code で次のように起動します。
+`~/.claude/skills/` に各スキルへのシンボリックリンクが作成され、`~/.claude/settings.json` に dev-flow の hooks が登録されます（登録前に `settings.json.bak.*` としてバックアップを取ります。hooks が不要なら `setup.sh --no-hooks`）。あとは Claude Code で次のように起動します。
 
 ```
 /dev-flow 新機能を実装したい
@@ -380,12 +380,31 @@ dev-flow-skills/
 └── doc/process/
     ├── state.json                  # フロー状態（セッション再開用）
     ├── task_checklist.md           # タスクチェックリスト（DAG依存付き）
+    ├── flow.log                    # hooks が記録する時系列イベントログ
     ├── coverage_matrix.md          # カバレッジ行列（REQ × TC × API）
     ├── plan_repair_log.md          # Plan Repair 履歴
     ├── reasoning/
     │   └── phase5-*.md             # 実装エージェントの推論トレース
     └── escalation_*.md             # エスカレーション報告（発生時のみ）
 ```
+
+---
+
+## Hook 連携
+
+オーケストレーターがプロンプトの指示（LLM の判断）で行っていた検証・記録・同期のうち、機械的に判定できるものを Claude Code の hooks に移しています。スクリプトは `dev-flow/hooks/` にあり、`setup.sh` が `~/.claude/settings.json` に登録します。
+
+| タイミング | 自動で行うこと |
+|---|---|
+| `phase-*-agent` 起動前 | 下流スキルの存在・`state.json` の妥当性・階層深さ・フェーズとエージェントの対応・同一フェーズの再実行回数を検証。違反時は起動を止める |
+| `state.json` 書き込み後 | JSON 検証（壊れていれば差し戻し）、`task_checklist.md` のフェーズ進捗を同期、`flow.log` に遷移を記録 |
+| `escalation_*.md` 生成後 | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` を設定していれば Slack に通知（未設定なら通信なし） |
+| `phase-*-agent` 完了後 | 所要時間を `flow.log` に記録。Phase 2 完了時は人間確認ゲートを念押し |
+| セッション開始 / 応答完了 | 進行中フローの現在フェーズと次アクションを表示 |
+
+dev-flow を使っていないプロジェクト（`doc/process/state.json` がない、`phase-*-agent` を起動しない）では何もしません。詳細・単体テスト方法は [`dev-flow/hooks/README.md`](dev-flow/hooks/README.md) を参照してください。
+
+Slack 通知を有効にするには `~/.claude/settings.json` の `env` に `SLACK_BOT_TOKEN` と `DEV_FLOW_SLACK_CHANNEL`（例: `#dev-flow-alerts`）を設定します。
 
 ---
 
