@@ -65,7 +65,7 @@
 
 | フィールド | 説明 |
 |---|---|
-| `current_phase` | 次に実行するフェーズ。`null` または欠損 = Phase 1 から開始 |
+| `current_phase` | 直前に完了したフェーズ（= 次に実行するフェーズの前段）。`null` または欠損 = Phase 1 から開始。Phase 8 完了時は `"completed"` を書いてから state.json を削除する |
 | `mode` | `"full"`（新規）/ `"incremental"`（差分のみ） |
 | `baseline_commit` | `incremental` 時のみ設定。設定主体・更新主体・参照範囲は下記「baseline_commit のライフサイクル」を参照 |
 | `tech_stack` | 言語・フレームワーク等。Phase 3 以降のサブエージェントが参照 |

@@ -1,0 +1,64 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/session-start.sh",
+            "timeout": 10,
+            "statusMessage": "dev-flow 状態確認"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/pre-agent-check.sh",
+            "timeout": 10,
+            "statusMessage": "dev-flow 起動前検証"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/state-sync.sh",
+            "timeout": 20,
+            "statusMessage": "dev-flow 状態同期"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/agent-complete.sh",
+            "timeout": 10,
+            "statusMessage": "dev-flow 完了記録"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/stop-summary.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -23,6 +23,22 @@ allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion 
 
 ---
 
+## Hook 連携
+
+`setup.sh` が `~/.claude/settings.json` に登録する hooks（`~/.claude/skills/dev-flow/hooks/`）が、以下を**プロンプトの指示ではなく決定的に**実行する。hook が動作している環境では該当ステップの手動実施は不要（結果は `additionalContext` で通知される）。hook 未導入の環境（`setup.sh --no-hooks`）では各 STEP の記述どおり手動で行う。
+
+| タイミング | hook | オーケストレーターへの影響 |
+|---|---|---|
+| `phase-*-agent` 起動前 | `pre-agent-check.sh` | 下流スキル欠損・state.json 不正・階層深さ超過は `deny`、フェーズとエージェントの不一致・同一フェーズ 5 回以上は `ask` で止まる。STEP 1.2 / 3.5 の検証を機械的に補完 |
+| `state.json` 書き込み後 | `state-sync.sh` | JSON 不正なら exit 2 で差し戻し。`task_checklist.md` の「フェーズ進捗」を `current_phase` に同期（STEP 5-2 の自動化）。`flow.log` に遷移を記録 |
+| `escalation_*.md` 生成後 | `state-sync.sh` | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` 設定時は Slack 通知 |
+| `phase-*-agent` 完了後 | `agent-complete.sh` | `flow.log` に完了・所要時間を記録。Phase 2 完了時は人間確認ゲートを念押し |
+| セッション開始 / 応答完了 | `session-start.sh` / `stop-summary.sh` | 進行中フローの現在フェーズと次アクションを表示 |
+
+hook からの `additionalContext` に「task_checklist.md のフェーズ進捗は自動同期済み」とあれば STEP 5-2 の Edit をスキップする。`deny` / `ask` された場合は理由を人間に伝え、勝手に回避策を取らない。
+
+---
+
 ## フロー実行
 
 ### STEP 1: 引数の解析
@@ -115,6 +131,8 @@ git ls-files \
 **2. 無限ループ検出:** 同じ `(phase, agent_name)` の組み合わせが `harness.phase_history` に5回以上あれば AskUserQuestion で確認。
 
 **3. タイムアウト目安:** haiku=5分 / sonnet=15分 / opus=30分。超過時は AskUserQuestion で人間に確認。
+
+1・2 は hook 導入環境では `pre-agent-check.sh` が Agent 起動時に機械的に検証する（違反時は `ask` で停止）。実測の所要時間は `doc/process/flow.log` の `duration_seconds` で確認できる。
 
 ### STEP 4: タスクを作成してサブエージェントを起動
 
@@ -224,7 +242,7 @@ Phase 5 で並列化する場合は `active_worktrees` に追加し SendMessage 
 
 **1.** `TaskUpdate(id, status: "completed")`
 
-**2. チェックリスト更新:** `task_checklist.md` が存在する場合、完了フェーズ行の `[ ]` → `[x]` に更新して進捗を表示。
+**2. チェックリスト更新:** `task_checklist.md` が存在する場合、完了フェーズ行の `[ ]` → `[x]` に更新して進捗を表示。hook 導入環境では `state.json` 書き込み時に `state-sync.sh` が自動同期するため、hook の `additionalContext` を確認したうえで Read して進捗を表示するだけでよい（「Hook 連携」参照）。
 
 **3. 次フェーズ移行:**
 

@@ -218,5 +218,6 @@ git log --oneline --grep="^fix\|^chore" -- .
 
 完了レポートを送信したら、以下を実行：
 
-1. `doc/process/state.json` を削除（フロー完了のため不要）
-2. 人間に「すべてのフェーズが完了しました」と通知
+1. `doc/process/state.json` の `current_phase` を `"completed"` に更新して保存（hooks が `task_checklist.md` のフェーズ進捗を全完了に同期し、`flow.log` に完了を記録する）
+2. `doc/process/state.json` を削除（フロー完了のため不要）
+3. 人間に「すべてのフェーズが完了しました」と通知
