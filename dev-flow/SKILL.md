@@ -71,7 +71,8 @@ state.json は **compliance 完了後も削除しない**（`next_stage: "comple
 | `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | `doc-validate.sh` | frontmatter の ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出しの対応・`status` の値域・チェックリストの 6 行を検証。違反は exit 2 で差し戻す（writer は指摘どおり直して書き直す） |
 | `escalation_*.md` 生成後 | `state-sync.sh` | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` 設定時は Slack 通知 |
 | `stage-*-agent` 完了後 | `agent-complete.sh` | `flow.log` に完了・所要時間を記録。requirements 完了時は人間確認ゲートを念押し |
-| `gh pr merge` 実行前 | `pr-merge-guard.sh` | 自動マージ条件（ベースブランチ・CI・コンフリクト・DB 破壊的変更・`--merge`）を検証し、満たさなければ `deny`。`main` / `develop` 向けは常に拒否 |
+| test ステージでのテストファイル書き込み前 | `test-stage-guard.sh` | テストコード・テスト定義書への Write / Edit を `deny`（プロダクションコードだけ直す） |
+| `gh pr merge` 実行前 | `pr-merge-guard.sh` | 自動マージ条件（ベースブランチ・CI・コンフリクト・DB 破壊的変更・テスト削除/スキップ・`--merge`）を検証し、満たさなければ `deny`。`main` / `develop` 向けは常に拒否 |
 | セッション開始 / 応答完了 | `session-start.sh` / `stop-summary.sh` | 進行中フローの次ステージとアクションを表示 |
 
 hook からの `additionalContext` に「task_checklist.md のステージ進捗は自動同期済み」とあれば STEP 5-2 の Edit をスキップする。`deny` / `ask` された場合は理由を人間に伝え、勝手に回避策を取らない。
@@ -323,6 +324,7 @@ implementation 内のグループ並列化は `stage-implementation-agent` が�
 - ベースブランチが `feature/*`（`DEV_FLOW_AUTO_MERGE_BASE_PATTERN` で変更可）で、`state.json.implementation_progress.base_branch` と一致する。`main` / `master` / `develop` / `release/*` / `hotfix/*` は無条件で拒否
 - CI チェックがすべて成功している（チェックが 1 つも無い PR は拒否）
 - `mergeable == MERGEABLE`（コンフリクトなし）
+- PR の diff にテストの削除・スキップ・無効化（`t.Skip` / `it.skip` / `@pytest.mark.skip` / `markTestSkipped` / テスト関数の削除。移動は可）が含まれない。パターンは `hooks/test-guard-patterns.txt`
 - PR の diff に DB の破壊的変更が含まれない（DROP / TRUNCATE / カラム削除・型変更・リネーム、ORM マイグレーションの remove / rename / alter 系、Terraform の DB リソース削除や `skip_final_snapshot = true` 等。パターンは `hooks/db-destructive-patterns.txt`）
 - マージ方式は `--merge` のみ。`--squash` / `--rebase` / `--auto` / `--admin` は拒否。1 コマンド 1 PR、番号または URL で明示
 

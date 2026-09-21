@@ -1,0 +1,6 @@
+--- a/pkg/auth/login_test.go
++++ b/pkg/auth/login_test.go
+@@ -5,4 +5,0 @@
+-func TestLogin_WrongPassword(t *testing.T) {
+-	t.Fatal("x")
+-}

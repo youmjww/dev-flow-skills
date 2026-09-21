@@ -11,14 +11,15 @@
 | `PostToolUse` | `Write\|Edit` | `state-sync.sh` | `state.json` の JSON 妥当性検証（壊れていれば exit 2 で差し戻し）、`task_checklist.md` ステージ進捗の自動同期、`flow.log` 記録。`escalation_*.md` 生成時は Slack 通知（opt-in） |
 | `PostToolUse` | `Write\|Edit` | `doc-validate.sh`（→ `doc-validate.py`） | `doc/{requirements,test-spec,api-spec,infra-spec}/*.md` と `task_checklist.md` のスキーマ検証。ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出し・`status` 値域・ステージ進捗 6 行。ERROR は exit 2 で差し戻し、WARN は `additionalContext` で通知。python3 が無い環境ではスキップ |
 | `PostToolUse` | `Agent` | `agent-complete.sh` | `stage-*-agent` 完了を `flow.log` に記録し所要時間を算出。requirements 完了時は人間確認ゲートを念押し |
-| `PreToolUse` | `Bash` | `pr-merge-guard.sh` | `gh pr merge` を捕まえ、自動マージ条件を検証。`main`/`develop`/`release/*`/`hotfix/*` 向けは常に `deny`。`feature/*` 向けは CI 全通過・コンフリクトなし・DB 破壊的変更なし（`db-destructive-patterns.txt`）・`--merge` 方式のときだけ `allow` |
+| `PreToolUse` | `Write\|Edit\|NotebookEdit` | `test-stage-guard.sh` | `next_stage == test` のとき、テストファイル（`*_test.go` / `test_*.py` / `*.test.ts` / `tests/` 等）と `doc/test-spec/` への書き込みを `deny`。test ステージはプロダクションコードしか直せない（DocDD） |
+| `PreToolUse` | `Bash` | `pr-merge-guard.sh` | `gh pr merge` を捕まえ、自動マージ条件を検証。`main`/`develop`/`release/*`/`hotfix/*` 向けは常に `deny`。`feature/*` 向けは CI 全通過・コンフリクトなし・DB 破壊的変更なし（`db-destructive-patterns.txt`）・テストの削除/スキップなし（`test-guard-patterns.txt`）・`--merge` 方式のときだけ `allow` |
 | `Stop` | — | `stop-summary.sh` | 直近 10 分以内に dev-flow イベントがあった場合のみ、次ステージとアクションを表示 |
 
 `stage-*-agent` 以外の Agent 呼び出し・`doc/process/` 以外への書き込みでは何もしないため、dev-flow を使わないプロジェクトへの影響はありません。
 
 ## 生成されるファイル
 
-- `doc/process/flow.log` — 時系列イベントログ（`event=agent_start|agent_complete|stage_transition|escalation|doc_invalid|auto_merge_allowed`）。デバッグと所要時間の把握に使います。git 管理して構いません。
+- `doc/process/flow.log` — 時系列イベントログ（`event=agent_start|agent_complete|stage_transition|escalation|doc_invalid|auto_merge_allowed|test_stage_write_denied`）。デバッグと所要時間の把握に使います。git 管理して構いません。
 
 ## Slack 通知（opt-in）
 
