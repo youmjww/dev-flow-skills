@@ -1,0 +1,54 @@
+---
+doc_type: requirements
+requirements:
+  - id: REQ-001
+    title: メールアドレスとパスワードでログインできる
+  - id: REQ-002
+    title: パスワードを 5 回連続で間違えるとアカウントが 15 分ロックされる
+  - id: REQ-003
+    title: ログイン成功時に有効期限 12 時間の JWT を発行する
+  - id: REQ-004
+    title: 退会済みユーザーはログインできない
+  - id: REQ-005
+    title: ログイン API は p95 で 300ms 以内に応答する
+  - id: REQ-006
+    title: ログアウトで JWT を失効させる
+---
+
+# 要件定義書: 認証
+
+## 概要
+
+メールアドレスとパスワードによる認証機能。
+
+## 用語集
+
+| 用語 | 定義 |
+|---|---|
+| ロック | 一定時間ログイン試行を拒否する状態 |
+| 退会済み | `users.deleted_at` が NULL でないユーザー |
+
+## 要件
+
+### REQ-001: メールアドレスとパスワードでログインできる
+- 入力: `email`（RFC 5322 形式）、`password`（8 文字以上 72 文字以下）
+- 一致すれば HTTP 200 と JWT を返す
+- 不一致なら HTTP 401、body は `{"error":{"code":"INVALID_CREDENTIALS"}}`
+
+### REQ-002: パスワードを 5 回連続で間違えるとアカウントが 15 分ロックされる
+- 5 回目の失敗以降、正しいパスワードでも HTTP 423 `{"error":{"code":"ACCOUNT_LOCKED"}}`
+- 最後の失敗から 15 分経過で解除。成功でカウンタは 0 に戻る
+
+### REQ-003: ログイン成功時に有効期限 12 時間の JWT を発行する
+- `exp` は発行時刻 + 12 時間（秒）。アルゴリズムは HS256
+
+### REQ-004: 退会済みユーザーはログインできない
+- `deleted_at` が非 NULL のユーザーは、パスワードが正しくても HTTP 401 `INVALID_CREDENTIALS`（退会の事実を漏らさない）
+
+### REQ-005: ログイン API は p95 で 300ms 以内に応答する
+- 100 rps の負荷で p95 が 300ms 以内
+
+### REQ-006: ログアウトで JWT を失効させる
+- `POST /auth/logout` に有効な JWT を Authorization: Bearer で送ると HTTP 204
+- 失効後、その JWT で保護 API を呼ぶと HTTP 401 `{"error":{"code":"TOKEN_REVOKED"}}`
+- 既に失効済み・無効な JWT で logout を呼んだ場合も HTTP 204（冪等）
