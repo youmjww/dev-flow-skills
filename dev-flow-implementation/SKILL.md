@@ -193,6 +193,8 @@ worktree 作成後、state.json の `phase_5_progress.active_worktrees` に作�
 
 ### STEP B: チーム種別に応じたエージェント起動
 
+Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implementer は **名前付きサブエージェント**として起動し、結果は最終回答（JSON）で受け取ります。並列起動するものは `run_in_background=true` で同一ターンに起動し、順次起動するものは `run_in_background=false` で 1 つずつ起動します。
+
 グループのチーム種別に応じて、以下のパターンでエージェントを起動します：
 
 **Infra グループ：Dev (Infra) + QA (Infra) を並列起動**
@@ -240,7 +242,7 @@ worktree 作成後、state.json の `phase_5_progress.active_worktrees` に作�
 
 ### STEP C: エージェントの完了待機
 
-グループのチーム種別に応じて、各エージェントからの SendMessage を待ちます：
+グループのチーム種別に応じて、各エージェントの完了通知（最終回答の JSON）を待ちます。`sleep` ポーリングはしません：
 
 - **Infra**: `dev-implementer-infra-group-N` + `qa-implementer-infra-group-N` の両方
 - **App**: `dev-implementer-app-group-N` + `qa-implementer-app-group-N` の両方
@@ -248,7 +250,7 @@ worktree 作成後、state.json の `phase_5_progress.active_worktrees` に作�
 
 **JSON パース処理:**
 
-受信したメッセージを JSON としてパースし、`status` フィールドで以下の通り分岐します：
+受け取った最終回答を JSON としてパースし、`status` フィールドで以下の通り分岐します：
 
 | status | blocker_type | 対応 |
 |---|---|---|

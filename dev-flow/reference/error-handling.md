@@ -32,7 +32,7 @@
 
 ## その他
 
-**`--from` 引数が不正:** 有効値（`requirements` / `spec` / `parallel` / `test` / `sync`）を AskUserQuestion で提示
+**`--from` 引数が不正:** 有効値（`requirements` / `spec` / `consistency` / `implementation` / `test` / `compliance`）を AskUserQuestion で提示
 
 **`--from` 指定時に state.json なし:** AskUserQuestion でエラー報告
 

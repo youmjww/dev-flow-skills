@@ -40,7 +40,7 @@
 | 要件の曖昧さ | Phase 1 | `requirements` |
 | 仕様間の矛盾 | Phase 3-4 | `spec` |
 | 技術的制約（技術スタック・実装方針の見直しが必要） | Phase 3-4 | `spec` |
-| テスト失敗 | Phase 5（対象グループのみ） | `parallel` |
+| テスト失敗 | Phase 5（対象グループのみ） | `implementation` |
 | その他 | 人間が判断 | 人間が `/dev-flow --from={値}` で指定 |
 
 **重要：再開は必ず `--from` 引数経由で行う。**

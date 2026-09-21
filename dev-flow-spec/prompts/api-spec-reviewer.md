@@ -1,9 +1,20 @@
 # api-spec-reviewer プロンプト
 
-`api-spec-writer` からの完了通知を待ち、通知が届いたらファイルを Read して以下を確認してください：
+レビュー対象: `{API_SPEC_PATH}`
+
+このファイルを Read して以下を確認してください（完了通知を待つ必要はありません。起動時点でファイルは生成済みです）：
 - 全エンドポイントのリクエスト・レスポンス定義が揃っているか
 - 認証・認可の記載があるか
 - エラーケースが網羅されているか
 
-問題があれば `api-spec-writer` に SendMessage で修正依頼を送り、再完了通知を待ってください。
-問題なければ `doc-orchestrator` に「api-spec レビュー完了: {API_SPEC_PATH}」と SendMessage で報告してください。
+SendMessage は使わず、最終回答として以下の JSON を返してください（呼び出し元が `changes_requested` なら `api-spec-writer` に修正を依頼し、再レビューのためにあなたを再起動します）：
+
+```json
+{"reviewer":"api-spec-reviewer","target":"{API_SPEC_PATH}","status":"approved","issues":[]}
+```
+
+```json
+{"reviewer":"api-spec-reviewer","target":"{API_SPEC_PATH}","status":"changes_requested","issues":[{"location":"TC-003","problem":"期待値が「適切に処理される」で曖昧","fix":"HTTP 400 と body の error.code を明記する"}]}
+```
+
+`issues[].fix` は writer がそのまま実行できる具体的な修正指示にすること。

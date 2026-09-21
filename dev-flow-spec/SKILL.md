@@ -1,8 +1,8 @@
 ---
 name: dev-flow-spec
-description: AI駆動開発フローのドキュメント生成フェーズ（Phase 3-4）。テスト定義書（Gherkin）・API仕様書（OpenAPI 3.1.0）・インフラ仕様書・UIモックを `doc-team` で並列生成し、frontmatter に `covers: [REQ-NNN]` を付与してエージェントレビューと人間レビューを得ます。要件定義承認後の `/dev-flow` 継続時、または `--from=spec` で起動時に使用します。
+description: AI駆動開発フローのドキュメント生成フェーズ（Phase 3-4）。テスト定義書（Gherkin）・API仕様書（OpenAPI 3.1.0）・インフラ仕様書・UIモックを名前付きサブエージェントで並列生成し、frontmatter に `covers: [REQ-NNN]` を付与してエージェントレビューと人間レビューを得ます。要件定義承認後の `/dev-flow` 継続時、または `--from=spec` で起動時に使用します。
 model: haiku
-allowed-tools: Read Write Edit Bash TeamCreate SendMessage AskUserQuestion
+allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
 paths: doc/process/state.json
 ---
 
@@ -25,25 +25,27 @@ paths: doc/process/state.json
 
 ## Phase 3: ドキュメント生成
 
-### 3-0. チーム作成
+### 3-0. 実行モデル（チーム機能は使わない）
 
-```
-TeamCreate(name: "doc-team")
-```
+Agent Teams（`TeamCreate` / `team_name`）は使用しません。writer・reviewer はすべて **名前付きサブエージェント**として `Agent(name=..., run_in_background=true)` で起動し、完了通知（最終回答）を本エージェントが受け取って次の処理を決めます。
 
-### 3a. オーケストレーターの起動
+- writer / reviewer は SendMessage を送らず、**最終回答で結果を返す**（各 prompts/*.md に記載済み）
+- 修正依頼は `SendMessage(to: "{writer name}", message: ...)` で **同じ名前の writer を再開**する（コンテキストを保ったまま続きから修正できる）
+- 再開できない場合（エージェントが破棄されている等）は同じ `name` で `Agent` を新規起動し、修正依頼をプロンプトに含める
+- 完了待ちは通知が届くまで待つ。`sleep` によるポーリングはしない
 
-最初に以下のエージェントを起動（`team_name="doc-team"`, `name="doc-orchestrator"`, `run_in_background=true`, `model="haiku"`）。
+### 3a. writer の並列起動
 
-プロンプトは `prompts/doc-orchestrator.md` を Read ツールで読み込み、プレースホルダー（`{IS_API}`, `{IS_INFRA}`, `{IS_GUI}`）を実際の値に置換してから Agent に渡してください。
+以下のうち起動条件を満たすものを **同一ターンで同時に**起動します（`run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。プロンプトは各ファイルを Read し、プレースホルダーを実際の値に置換してから Agent に渡してください。
 
-### 3b. テスト定義書の生成
+| name | プロンプトファイル | プレースホルダー | 起動条件 |
+|---|---|---|---|
+| `test-spec-writer` | `prompts/test-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{TEST_SPEC_PATH}` | 常に |
+| `api-spec-writer` | `prompts/api-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{API_SPEC_PATH}`, `{tech_stack}` | IS_API=true |
+| `infra-spec-writer` | `prompts/infra-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{INFRA_SPEC_PATH}`, `{tech_stack}` | IS_INFRA=true |
+| `mock-writer` | `prompts/mock-writer.md` | `{REQUIREMENTS_PATHS}`, `{MOCK_PATH}`, `{tech_stack}` | IS_GUI=true |
 
-以下のエージェントを起動（`team_name="doc-team"`, `name="test-spec-writer"`, `run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。
-
-プロンプトは `prompts/test-spec-writer.md` を Read ツールで読み込み、プレースホルダー（`{REQUIREMENTS_PATHS}`, `{TEST_SPEC_PATH}`）を実際の値に置換してから Agent に渡してください。
-
-**テスト定義書の frontmatter テンプレート（writer に指示すること）:**
+**テスト定義書の frontmatter テンプレート（test-spec-writer に指示すること）:**
 
 ```markdown
 ---
@@ -61,15 +63,7 @@ test_cases:
 ---
 ```
 
-要件定義書の `requirements[].id`（REQ-NNN）を参照して `covers` フィールドを埋めること。
-
-### 3c. API仕様書の生成（IS_API=true の場合）
-
-3b と同時に以下のエージェントを起動（`team_name="doc-team"`, `name="api-spec-writer"`, `run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。
-
-プロンプトは `prompts/api-spec-writer.md` を Read ツールで読み込み、プレースホルダー（`{REQUIREMENTS_PATHS}`, `{API_SPEC_PATH}`, `{tech_stack}`）を実際の値に置換してから Agent に渡してください。
-
-**API仕様書の frontmatter テンプレート（writer に指示すること）:**
+**API仕様書の frontmatter テンプレート（api-spec-writer に指示すること）:**
 
 ```markdown
 ---
@@ -86,43 +80,39 @@ endpoints:
 ---
 ```
 
-要件定義書の `requirements[].id` を参照して `covers` フィールドを埋めること。
+いずれも要件定義書の `requirements[].id`（REQ-NNN）を参照して `covers` フィールドを埋めること。
 
-### 3d. インフラ仕様書の生成（IS_INFRA=true の場合）
+### 3b. reviewer の起動（writer 完了ごと）
 
-3b・3c と同時に以下のエージェントを起動（`team_name="doc-team"`, `name="infra-spec-writer"`, `run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。
+writer の完了通知を受け取るたびに、対応する reviewer を起動します（`run_in_background=true`, `model="sonnet"`）。他の writer の完了は待ちません。
 
-プロンプトは `prompts/infra-spec-writer.md` を Read ツールで読み込み、プレースホルダー（`{REQUIREMENTS_PATHS}`, `{INFRA_SPEC_PATH}`, `{tech_stack}`）を実際の値に置換してから Agent に渡してください。
+| writer | reviewer name | プロンプトファイル | プレースホルダー |
+|---|---|---|---|
+| `test-spec-writer` | `test-spec-reviewer` | `prompts/test-spec-reviewer.md` | `{TEST_SPEC_PATH}` |
+| `api-spec-writer` | `api-spec-reviewer` | `prompts/api-spec-reviewer.md` | `{API_SPEC_PATH}` |
+| `infra-spec-writer` | `infra-spec-reviewer` | `prompts/infra-spec-reviewer.md` | `{INFRA_SPEC_PATH}` |
+| `mock-writer` | `mock-reviewer` | `prompts/mock-reviewer.md` | `{MOCK_PATH}` |
 
-### 3e. モック HTML の生成（IS_GUI=true の場合）
+reviewer は最終回答として `{"status":"approved"|"changes_requested","issues":[...]}` の JSON を返します。
 
-3b・3c・3d と同時に以下のエージェントを起動（`team_name="doc-team"`, `name="mock-writer"`, `run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。
+### 3c. 修正ループ
 
-プロンプトは `prompts/mock-writer.md` を Read ツールで読み込み、プレースホルダー（`{REQUIREMENTS_PATHS}`, `{MOCK_PATH}`, `{tech_stack}`）を実際の値に置換してから Agent に渡してください。
+| reviewer の結果 | 動作 |
+|---|---|
+| `approved` | そのドキュメントは完了 |
+| `changes_requested` | `issues[]` を `SendMessage(to: "{writer name}")` で writer に渡して修正させ、完了後に同じ reviewer を再起動して再レビュー |
+| JSON がパースできない | 回答本文を人間が読める形で保持し、明確な指摘があれば `changes_requested` として扱う |
 
-### 3f. レビュアーの起動
+1 ドキュメントあたりの修正ループは **最大 3 回**。超過したら残りの指摘を Phase 4 の人間レビューに持ち越します。
 
-3b・3c・3d・3e と同時に、以下のレビュアーエージェントを起動します。各レビュアーは writer からの SendMessage を待機します。
+### 3d. 完了判定とリカバリ
 
-各レビュアーのプロンプトは以下のファイルを Read ツールで読み込み、プレースホルダーを実際の値に置換してから Agent に渡してください：
-
-| エージェント | プロンプトファイル | 起動条件 |
-|---|---|---|
-| test-spec-reviewer | `prompts/test-spec-reviewer.md` | 常に起動 |
-| api-spec-reviewer | `prompts/api-spec-reviewer.md` | IS_API=true の場合 |
-| infra-spec-reviewer | `prompts/infra-spec-reviewer.md` | IS_INFRA=true の場合 |
-| mock-reviewer | `prompts/mock-reviewer.md` | IS_GUI=true の場合 |
-
-すべてのレビュアーは `team_name="doc-team"`, `run_in_background=true`, `model="sonnet"` で起動します。
-
-### 3f. 完了待機
-
-`doc-orchestrator` からの「doc-team 全レビュー完了」通知を待ちます。
+起動したすべての reviewer が `approved`（または上限到達）になったら Phase 4 へ進みます。
 
 通知が届かない場合（エージェントが途中でエラー終了した等）は、以下の手順でリカバリします：
 1. 各ドキュメントファイル（TEST_SPEC_PATH / API_SPEC_PATH / INFRA_SPEC_PATH / MOCK_PATH）の存在を Bash で確認する
 2. ファイルが存在すれば内容を Read して品質を直接確認し、問題なければ Phase 4 の人間レビューへ進む
-3. ファイルが存在しなければ、該当する writer を Agent で再起動して生成し直す
+3. ファイルが存在しなければ、該当する writer を同じ `name` で再起動して生成し直す
 
 ---
 
@@ -137,14 +127,15 @@ AskUserQuestion ツールで以下を同時に提示してレビューを依頼�
 
 | 対象 | 結果 | 動作 |
 |---|---|---|
-| テスト定義書 | 修正が必要 | 指摘内容を `test-spec-writer` に SendMessage して再生成、完了後 `test-spec-reviewer` が再レビュー |
-| API仕様書 | 修正が必要 | 指摘内容を `api-spec-writer` に SendMessage して再生成、完了後 `api-spec-reviewer` が再レビュー |
-| モック | 修正が必要 | 指摘内容を `mock-writer` に SendMessage して再生成、完了後 `mock-reviewer` が再レビュー |
+| テスト定義書 | 修正が必要 | 指摘内容を `test-spec-writer` に SendMessage して再生成、完了後 `test-spec-reviewer` を再起動して再レビュー |
+| API仕様書 | 修正が必要 | 指摘内容を `api-spec-writer` に SendMessage して再生成、完了後 `api-spec-reviewer` を再起動して再レビュー |
+| モック | 修正が必要 | 指摘内容を `mock-writer` に SendMessage して再生成、完了後 `mock-reviewer` を再起動して再レビュー |
+| インフラ仕様書 | 修正が必要 | 指摘内容を `infra-spec-writer` に SendMessage して再生成、完了後 `infra-spec-reviewer` を再起動して再レビュー |
 | すべて承認 | — | 出力処理へ進む |
 
-**SendMessage が届かない場合（writer が既に終了済み）:**
-SendMessage の送信先エージェントが非アクティブな場合は、Agent ツールで同じ `name` と `team_name` を使って新規起動し、修正依頼プロンプトを直接渡してください。
-例: `Agent(name="test-spec-writer", team_name="doc-team", run_in_background=true, model="sonnet", mode="acceptEdits", prompt="以下の指摘を反映してテスト定義書を修正してください: {指摘内容}。完了後 test-spec-reviewer に報告してください。")`
+**SendMessage で再開できない場合（writer が破棄済み等）:**
+Agent ツールで同じ `name` を使って新規起動し、修正依頼プロンプトを直接渡してください。
+例: `Agent(name="test-spec-writer", run_in_background=true, model="sonnet", mode="acceptEdits", prompt="以下の指摘を反映して {TEST_SPEC_PATH} を修正してください: {指摘内容}。完了したら修正内容の要約を最終回答で返してください。")`
 
 ---
 

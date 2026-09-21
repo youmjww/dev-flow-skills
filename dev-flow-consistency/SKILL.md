@@ -161,49 +161,30 @@ Phase 4.5a（整合性チェック）完了後、以下の手順で `doc/process
 
 ## Phase 4.5b・4.5c: タスクチェックリストとスペックキャッシュの並列生成
 
-TeamCreate で `consistency-team` を作成し、以下の2エージェントを同時に起動します。
-
-```
-TeamCreate(name: "consistency-team")
-```
+Agent Teams（`TeamCreate` / `team_name`）は使用しません。以下の 2 エージェントを **同一ターンで同時に** 名前付きバックグラウンドサブエージェントとして起動し、それぞれの完了通知（最終回答）を本エージェントが受け取ります。中間オーケストレーター（旧 `consistency-orchestrator`）は置きません。
 
 ### タスクチェックリスト生成（`run_in_background=true`, `model="sonnet"`, `name="checklist-writer"`, `mode="acceptEdits"`）
 
 プロンプトは `prompts/checklist-writer.md` を Read ツールで読み込み、プレースホルダー（`{MODE}`, `{BASELINE_COMMIT}`, `{REQUIREMENTS_PATHS}` 等）を実際の値に置換してから Agent に渡してください。
 
----
-
 ### スペックキャッシュ生成（`run_in_background=true`, `model="sonnet"`, `name="spec-cache-writer"`, `mode="acceptEdits"`）
 
 プロンプトは `prompts/spec-cache-writer.md` を Read ツールで読み込み、プレースホルダー（`{MODE}`, `{BASELINE_COMMIT}`, `{REQUIREMENTS_PATHS}` 等）を実際の値に置換してから Agent に渡してください。
 
----
+### 完了待ち
 
-### consistency-orchestrator（`run_in_background=true`, `model="haiku"`, `name="consistency-orchestrator"`, `team_name="consistency-team"`）
-
----
-`checklist-writer` からの「checklist 生成完了」通知と、`spec-cache-writer` からの「spec-cache 生成完了」通知を待ってください。
-両方揃ったら、以下の JSON で報告してください：
-
-```
-SendMessage(
-  to: "phase-consistency-agent",
-  message: '{"agent":"consistency-orchestrator","status":"completed","result":{"generated":["task_checklist","spec_cache"]},"blockers":[]}'
-)
-```
-
-パース失敗に備えたフォールバックとして、JSON が生成できない場合は `"consistency-team 完了"` のフリーテキストで送信してください。
+両方の完了通知が届くまで待ちます（`sleep` ポーリング禁止）。各 writer は最終回答で「生成完了: {パス}」と生成内容の要約を返します。
 
 ---
 
 ## Phase 4.5d: 設計凍結コミット
 
-`consistency-team` の完了通知を受けたら、以下を実行。
+`checklist-writer` と `spec-cache-writer` の両方の完了通知を受けたら、以下を実行。
 
 通知が届かない場合（エージェントが途中でエラー終了した等）は、以下の手順でリカバリします：
 1. `doc/process/task_checklist.md` と `doc/internal/spec_cache.md` の存在を Bash で確認する
 2. 両ファイルが存在すれば内容を Read して品質を直接確認し、問題なければ Phase 4.5d へ進む
-3. どちらかが存在しなければ、該当する writer を Agent で再起動して生成し直す
+3. どちらかが存在しなければ、該当する writer を同じ `name` で Agent 再起動して生成し直す
 
 ```bash
 git add doc/

@@ -105,4 +105,4 @@ baseline_commit: `{BASELINE_COMMIT}`
 ```
 
 各タスクは1コミットで完結できる粒度（1〜2時間程度）に分割すること。グループ分けは依存関係を基準にし、独立タスクはできるだけ同一グループにまとめて並列効率を高めること。
-完了したら `consistency-orchestrator` に「checklist 生成完了: doc/process/task_checklist.md」と SendMessage で報告してください。
+完了したら SendMessage は使わず、最終回答として「checklist 生成完了: doc/process/task_checklist.md」と生成内容の要約（グループ数・タスク数・判断に迷った点）を返してください。
