@@ -16,6 +16,16 @@ paths: doc/process/state.json
 | `full` | 通常（全 STEP を実行） | `"consistency"` | `stage-consistency-agent` |
 | `incremental` | 要件追加時の差分チェック | `"consistency"` + `mode="incremental"` | `stage-consistency-agent` |
 | `mini` | implementation 中の Plan Repair 時（差分修正のみ） | `"plan_repair"` | `stage-plan-repair-agent` |
+| `lite` | `kind = "fix"` / `"refactor"`（ドキュメント整合性は変わらない前提で、実装タスクだけ切る） | `"consistency"` + `kind` が `fix` / `refactor` | `stage-consistency-agent` |
+
+**`lite` モードの動作（kind = fix / refactor）:**
+- STEP 0〜3（Impact Analysis・ID 整合性・整合性チェック・カバレッジ行列）はスキップ
+- STEP 4 の checklist-writer に次を渡して **1 グループだけ**のチェックリストを生成させる：
+  - `fix`: テスト定義書の `status: added` の TC（再現テストケース）と `task`。QA タスク = 再現 TC を実装する、Dev タスク = それを通す修正
+  - `refactor`: `task` のみ。QA タスク = 既存テストが全通過することの確認（新規 TC なし）、Dev タスク = task に書かれた内部改善
+  - グループ種別は変更対象ファイルから判定（IaC のみなら Infra、それ以外は App、両方なら Cross）
+- spec-cache-writer は `fix` では実行（追加 TC を反映）、`refactor` ではスキップ
+- STEP 5 の設計凍結コミットは実行する
 
 **`mini` モードの動作:**
 - STEP 1（ID整合性）・STEP 2（整合性チェック）・STEP 3（カバレッジ行列）はスキップ
@@ -26,6 +36,8 @@ paths: doc/process/state.json
 ---
 
 ## 入力
+
+`state.json` の `kind` と `task` を必ず読む（`lite` モードの判定に使う）。
 
 状態ファイル `doc/process/state.json` から読み込み：
 - requirements_paths

@@ -12,8 +12,8 @@ flow_log_recent 600 || exit 0
 STAGE="$(next_stage)"
 NEXT="$(stage_label "$STAGE")"
 
-if [ "$NEXT" = "完了" ]; then
-  MSG="dev-flow: 全ステージ完了 🎉"
+if [ "$STAGE" = "completed" ]; then
+  MSG="dev-flow: 全ステージ完了 🎉 次の変更は /dev-flow --kind=change|fix|refactor で開始できます"
 elif [ "$STAGE" = "spec" ]; then
   MSG="dev-flow: 要件定義完了（人間確認ゲート）。doc/requirements/ を確認後 /dev-flow で $NEXT へ進みます。"
 else

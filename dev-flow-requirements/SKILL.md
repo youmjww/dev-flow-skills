@@ -28,6 +28,11 @@ find doc/requirements -name "*.md" 2>/dev/null | sort
 
 ### 1b. モード選択
 
+オーケストレーターから渡された `kind` を先に見る：
+
+- `kind = "change"` → **修正モード**固定。既存ファイルから対象を選ばせる（新規作成は「追加の要件定義書が必要な場合」だけ）。変更する REQ は ID を保ったまま本文を書き換え、追加する REQ は既存の最大番号 + 1 から採番する。削除する REQ は本文を消さず `（廃止）` を付けて残す（spec の差分更新がこの差分を見る）
+- `kind = "feature"` → 下記のとおり人間に選ばせる
+
 **ファイルが1件以上見つかった場合**
 
 AskUserQuestion ツールで選択肢を提示します：
@@ -189,10 +194,12 @@ AskUserQuestion ツールを使用してブロッキングレビューを行い�
    ```bash
    mkdir -p doc/process
    ```
-2. 以下の内容で `doc/process/state.json` を作成：
+2. `doc/process/state.json` を書く。**既に存在する場合**（bootstrap 済み、または前回 run が `completed`）は上書きせず、`next_stage` / `kind` / `task` / `requirements_paths` / `mode` / `baseline_commit` / `harness` だけを更新し、`tech_stack` や各 spec パスは既存値を保つ（技術スタックの変更を人間が明示した場合のみ書き換える）。存在しない場合は以下の内容で作成：
    ```json
    {
      "next_stage": "spec",
+     "kind": "{オーケストレーターから渡された kind（"feature" または "change"）}",
+     "task": "{オーケストレーターから渡された task}",
      "mode": "{オーケストレーターから渡された mode（"full" または "incremental"）}",
      "baseline_commit": "{オーケストレーターから渡された baseline_commit（null または コミットハッシュ）}",
      "requirements_paths": [REQUIREMENTS_PATHS],

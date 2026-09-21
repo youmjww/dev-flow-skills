@@ -20,6 +20,17 @@ paths: doc/process/state.json
 - is_gui
 - tech_stack
 
+## STEP 0: 検証範囲の決定（kind による）
+
+`state.json.kind` で STEP 1〜2 の対象 ID を絞る：
+
+| kind | 対象 |
+|---|---|
+| `feature` | 全 REQ / TC / API |
+| `change` | テスト定義書・API 仕様書で `status: added` / `status: modified` の ID、およびそれらが `covers` する REQ |
+| `fix` | `status: added` の TC（再現テストケース）のみ。加えて test ステージの全通過を確認する |
+| `refactor` | 全 REQ / TC / API（挙動が変わっていないことの確認。ドキュメントに差分が無いことも `git diff {baseline_commit}..HEAD -- doc/` で確認し、差分があれば乖離として報告） |
+
 ## STEP 1: カバレッジ行列による機械的検証
 
 ドキュメント準拠チェック（STEP 2）の前に、`doc/process/coverage_matrix.md` を使って以下の機械的検証を実行します。
@@ -218,6 +229,11 @@ git log --oneline --grep="^fix\|^chore" -- .
 
 完了レポートを送信したら、以下を実行：
 
-1. `doc/process/state.json` の `next_stage` を `"completed"` に更新して保存（hooks が `task_checklist.md` のステージ進捗を全完了に同期し、`flow.log` に完了を記録する）
-2. `doc/process/state.json` を削除（フロー完了のため不要）
-3. 人間に「すべてのステージが完了しました」と通知
+1. `change` / `fix` の場合、テスト定義書・API 仕様書・インフラ仕様書の frontmatter から `status: added|modified` を取り除く（次の run が差分を正しく判定できるように）。要件定義書の `（廃止）` 項目はそのまま残す
+2. `doc/process/state.json` を更新して保存（**削除しない**。`tech_stack` / 各パス / `is_*` / `baseline_commit` は次の run が使う）：
+   - `next_stage` を `"completed"`
+   - `baseline_commit` を `git rev-parse HEAD`（次の change / fix の差分基点）
+   - `implementation_progress` を削除
+   hooks が `task_checklist.md` のステージ進捗を全完了に同期し、`flow.log` に完了を記録する
+3. `git add doc/ && git commit -m "docs: {kind} 完了（{task の要約}）"` で仕様書の status 除去と state.json を確定
+4. 人間に「すべてのステージが完了しました。次の変更は `/dev-flow --kind=change|fix|refactor "内容"` で始められます」と通知

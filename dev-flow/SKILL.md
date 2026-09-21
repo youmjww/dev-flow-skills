@@ -21,8 +21,24 @@ allowed-tools: Read Write Edit Bash Agent AskUserQuestion WebSearch WebFetch
 | 4 | `implementation` | 並列実装（worktree・Dev/QA・レビュー・PR） | `dev-flow-implementation` |
 | 5 | `test` | テスト実行（Haiku → Sonnet 昇格） | `dev-flow-test` |
 | 6 | `compliance` | 準拠チェック・完了報告 | `dev-flow-compliance` |
+| 0 | `bootstrap` | 既存コードから as-is ドキュメントを逆生成する導入ステージ（既存プロジェクトで最初の 1 回だけ） | `dev-flow-bootstrap` |
 
 ステージ名は `--from=` の値・`state.json.next_stage` の値・エージェント名（`stage-<stage>-agent`）・`task_checklist.md` の進捗行で共通に使う。番号は表示用。
+
+## 変更種別（kind）と通るステージ
+
+`state.json.kind` で、どのステージを通るかが決まる：
+
+| kind | 用途 | requirements | spec | consistency | implementation | test | compliance |
+|---|---|---|---|---|---|---|---|
+| `feature` | 新機能（既定） | ● 新規作成 | ● 全文生成 | ● 全 STEP | ● | ● | ● 全 ID |
+| `change` | 既存機能の要件変更 | ● 修正モード | ● 差分更新 | ● Impact Analysis | ● 影響グループのみ | ● | ● 変更 ID のみ |
+| `fix` | 不具合修正（要件は変わらない） | — | ● 再現 TC 追加のみ | ● lite（1 グループ） | ● 1 グループ | ● | ● 追加 TC のみ |
+| `refactor` | 挙動を変えない内部改善 | — | — | ● lite（1 グループ） | ● 1 グループ | ● | ● 全 ID（挙動不変の確認） |
+
+最初に実行するステージ: `feature` / `change` → `requirements`、`fix` → `spec`、`refactor` → `consistency`。人間確認ゲートは requirements の後のみ（`fix` / `refactor` は最初のステージから自動で進む）。
+
+`fix` / `refactor` は要件定義書・`tech_stack` が既に存在することが前提。`doc/process/state.json` が無い既存プロジェクトでは先に `bootstrap` を実行する。
 
 ---
 
@@ -30,7 +46,9 @@ allowed-tools: Read Write Edit Bash Agent AskUserQuestion WebSearch WebFetch
 
 状態ファイル: `doc/process/state.json`
 
-主要フィールド: `next_stage`（**次に実行する**ステージ名）/ `mode`（full or incremental）/ `baseline_commit` / `tech_stack` / `implementation_progress`
+主要フィールド: `next_stage`（**次に実行する**ステージ名）/ `kind` / `task` / `mode`（full or incremental）/ `baseline_commit` / `tech_stack` / `implementation_progress`
+
+state.json は **compliance 完了後も削除しない**（`next_stage: "completed"` のまま残す）。`tech_stack` / 各ドキュメントパス / `is_*` フラグ / `baseline_commit` はプロジェクトの永続情報で、次の `change` / `fix` / `refactor` がそのまま使う。新しい run を始めるときは `next_stage` / `kind` / `task` / `harness.started_at` を書き換え、`implementation_progress` と `harness.stage_history` を初期化する。
 
 旧スキーマ（`current_phase: "phase_2"` 等 = 完了フェーズ）の state.json を見つけたら、hook と同じ対応で `next_stage` に読み替えて書き直す: `phase_2→spec`, `phase_4→consistency`, `phase_4_5→implementation`, `phase_4_5_mini→plan_repair`, `phase_5→test`, `phase_6→compliance`。
 
@@ -73,6 +91,8 @@ hook からの `additionalContext` に「task_checklist.md のステージ進捗
 `{{ARGS}}` を解析：
 
 - **TASK**: `--` で始まらない部分
+- **KIND**: `--kind=` の値（`feature` / `change` / `fix` / `refactor`）。未指定時は STEP 1.5 で決める
+- **BOOTSTRAP**: ARGS に `"--bootstrap"` が含まれる場合は `true`。STEP 1.5 の判定を飛ばして `bootstrap` ステージを起動する
 - **FROM**: `--from=` の値（指定時は state.json の `next_stage` にその値を書いてから開始する）
 - **DRY_RUN**: ARGS に `"--dry-run"` が含まれる場合は `true`。サブエージェントを起動せずフロー構成を検証して終了する
 
@@ -93,7 +113,8 @@ for f in \
   ~/.claude/skills/dev-flow-consistency/SKILL.md \
   ~/.claude/skills/dev-flow-implementation/SKILL.md \
   ~/.claude/skills/dev-flow-test/SKILL.md \
-  ~/.claude/skills/dev-flow-compliance/SKILL.md; do
+  ~/.claude/skills/dev-flow-compliance/SKILL.md \
+  ~/.claude/skills/dev-flow-bootstrap/SKILL.md; do
   [ -f "$f" ] || echo "MISSING: $f"
 done
 ```
@@ -115,7 +136,9 @@ done
 ✅ 全スキルファイル確認完了 / ❌ 欠損スキルあり。setup.sh を実行してください。
 ```
 
-### STEP 1.5: 開発モードの判定（state.json が存在しない場合のみ）
+### STEP 1.5: 変更種別（kind）と開発モードの判定
+
+`--from` 指定時、または state.json の `next_stage` が `completed` 以外で進行中のときはスキップ（進行中 run の `kind` をそのまま使う）。
 
 **1. 既存実装の確認:**
 
@@ -130,18 +153,37 @@ git ls-files \
   | grep -cE '\.(go|py|ts|tsx|js|jsx|rb|java|rs|kt|swift|c|cpp|cs)$' 2>/dev/null || echo 0
 ```
 
-出力が `1` 以上 → 実装コードあり。`0` → `"full"` モード確定。
+出力が `1` 以上 → 実装コードあり。`0` → `kind = "feature"`, `mode = "full"` で確定（KIND 引数があってもそちらは無視せず、`feature` 以外なら「実装コードが無いので feature として扱う」と伝える）。
 
-**2. 既存コミットと実装コードが両方存在する場合:** AskUserQuestion で確認：
+**2. 実装コードがある場合:**
 
-| 選択肢 | mode | baseline_commit |
+まず state.json と要件定義書の有無を見る：
+
+| state.json | `doc/requirements/*.md` | 判定 |
 |---|---|---|
-| 新規開発（ゼロから全機能実装） | `"full"` | `null` |
-| 要件追加（既存実装への差分のみ追加） | `"incremental"` | `git rev-parse HEAD` |
+| なし | なし | **未導入の既存プロジェクト**。AskUserQuestion で「`bootstrap`（既存コードから as-is ドキュメントを生成。推奨）/ `feature` として新規機能だけ文書化して進める」を提示。`bootstrap` を選んだら STEP 4 で `stage-bootstrap-agent` を起動し、完了後にこの STEP に戻る |
+| なし | あり | 手書きの要件定義書がある。REQ-ID が振られていなければ `bootstrap` を勧める（ID 付与だけ行う） |
+| あり（`completed`） | あり | 導入済み。次の判定へ |
+
+KIND が未指定なら AskUserQuestion で確認（TASK の文面から推測できる場合は推測値を先頭に「(推奨)」を付けて提示）：
+
+| 選択肢 | kind | 最初のステージ |
+|---|---|---|
+| 新機能を追加する | `feature` | requirements |
+| 既存機能の要件を変更する | `change` | requirements（修正モード） |
+| 不具合を直す（要件は変わらない） | `fix` | spec（再現 TC 追加） |
+| 挙動を変えずに内部を改善する | `refactor` | consistency（lite） |
+
+`mode` は実装コードがある時点で `"incremental"`、`baseline_commit` は state.json に既にあればその値、無ければ `git rev-parse HEAD`。
+
+**3. state.json への書き込み:**
+
+- state.json が無い（`feature` / `change` で bootstrap を飛ばした場合）→ requirements ステージが生成するので、`kind` / `task` / `mode` / `baseline_commit` をプロンプトで渡す
+- state.json がある → `next_stage` を kind の最初のステージ、`kind`、`task`、`harness.started_at` を書き換え、`implementation_progress` を削除、`harness.stage_history` を `[]` にして保存
 
 ### STEP 2: 状態ファイルの読み込み
 
-`doc/process/state.json` が存在する場合、Read で `next_stage` を確認（旧スキーマなら「状態管理」の対応で読み替える）。
+`doc/process/state.json` が存在する場合、Read で `next_stage` を確認（旧スキーマなら「状態管理」の対応で読み替える）。`completed` なら STEP 1.5 で新しい run として書き換え済みのはずなので、その値を使う。
 
 `--from` が指定されている場合（`requirements` 以外）:
 1. state.json が無ければ AskUserQuestion でエラー報告（`reference/error-handling.md`）
@@ -175,6 +217,7 @@ git ls-files \
 | `implementation` | 4. implementation: 並列実装 | `stage-implementation-agent` | haiku | `dev-flow-implementation/SKILL.md` |
 | `test` | 5. test: テスト実行 | `stage-test-agent` | haiku | `dev-flow-test/SKILL.md` |
 | `compliance` | 6. compliance: 準拠チェック・完了 | `stage-compliance-agent` | opus | `dev-flow-compliance/SKILL.md` |
+| （state.json なし・`--bootstrap` または STEP 1.5 で選択） | 0. bootstrap: as-is ドキュメント生成 | `stage-bootstrap-agent` | opus | `dev-flow-bootstrap/SKILL.md` |
 
 スキルファイルのパスはすべて `~/.claude/skills/` 配下。
 
@@ -216,6 +259,7 @@ Agent(
 作業ディレクトリ: {pwd の結果}
 状態ファイル: doc/process/state.json
 引数: {ARGS}
+変更種別: {kind} / タスク: {task}
 開発モード: {mode} / baseline_commit: {baseline_commit}
 
 ## 実行する手順
@@ -287,8 +331,9 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 
 | 完了したステージ | 次の動作 |
 |---|---|
+| bootstrap | **手動確認**: 生成した as-is ドキュメントの確認を依頼し、確認後に `/dev-flow --kind=...` で本来の変更を始めるよう案内して終了 |
 | requirements（next_stage が `spec` になった） | **手動確認**: 「要件定義完了。確認後 `/dev-flow` を実行してください。」 |
-| spec 以降 | **自動移行**: STEP 2 に戻って次ステージを自動実行（compliance まで連続） |
+| spec 以降 | **自動移行**: STEP 2 に戻って次ステージを自動実行（compliance まで連続）。`fix` / `refactor` は最初のステージからこの扱い |
 | plan_repair | `next_stage` が `"implementation"` に戻っていることを確認して implementation を再開 |
 
 ---

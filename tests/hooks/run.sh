@@ -16,6 +16,15 @@ PASS=0
 FAIL=0
 CURRENT=""
 
+# 下流スキルの存在チェックはリポジトリ内のスキルを指す偽 HOME で行う（インストール状態に依存しない）
+FAKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/dev-flow-hooks-home.XXXXXX")"
+mkdir -p "$FAKE_HOME/.claude/skills"
+for d in "$ROOT"/dev-flow*/; do
+  d="${d%/}"
+  ln -s "$d" "$FAKE_HOME/.claude/skills/$(basename "$d")"
+done
+export HOME="$FAKE_HOME"
+
 # ---------------------------------------------------------------------------
 # アサーション
 # ---------------------------------------------------------------------------
@@ -113,12 +122,22 @@ section "lib.sh ヘルパー"
   assert_empty "iso_to_epoch は不正文字列で空を返す" "$(iso_to_epoch 'not-a-date')"
   assert_eq "stage_rank(implementation)" "$(stage_rank implementation)" "3"
   assert_eq "expected_agent_for_stage(test)" "$(expected_agent_for_stage test)" "stage-test-agent"
-  assert_eq "stage_label(completed)" "$(stage_label completed)" "完了"
+  assert_contains "stage_label(completed)" "$(stage_label completed)" "完了"
   assert_eq "legacy_stage(phase_4_5_mini) は旧値を読み替える" "$(legacy_stage phase_4_5_mini)" "plan_repair"
   rm -f "$f"
   exit $FAIL
 )
 sub_fail=$?; FAIL=$((FAIL + sub_fail)); PASS=$((PASS + 7 - sub_fail))
+
+# ---------------------------------------------------------------------------
+# 静的チェック
+# ---------------------------------------------------------------------------
+section "静的チェック"
+# bash 3.2 は `$VAR（` のように変数名の直後にマルチバイト文字が続くと変数名を誤認して unbound variable になる
+bad="$(grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]' "$HOOKS"/*.sh 2>/dev/null || true)"
+assert_empty "変数直後にマルチバイト文字が続く箇所が無い（\${VAR} を使う）" "$bad"
+for f in "$HOOKS"/*.sh; do bash -n "$f" 2>/dev/null || fail "構文: $f"; done
+ok "全 hook が bash -n を通る"
 
 # ---------------------------------------------------------------------------
 # pre-agent-check.sh
@@ -162,6 +181,16 @@ assert_eq "階層深さ上限で ask" "$(decision "$out")" "ask"
 write_state "$dir" spec '.harness.stage_history = [range(5) | {stage:"spec"}]'
 out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
 assert_eq "同一ステージ 5 回で ask（ループ検出）" "$(decision "$out")" "ask"
+
+rm -f "$dir/doc/process/state.json"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-bootstrap-agent opus)")"
+assert_empty "bootstrap は state.json 無しで許可" "$out"
+write_state "$dir" spec
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-bootstrap-agent opus)")"
+assert_eq "進行中 run があるときの bootstrap は ask" "$(decision "$out")" "ask"
+write_state "$dir" completed
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-bootstrap-agent opus)")"
+assert_empty "completed なら bootstrap は許可" "$out"
 
 printf '{"current_phase":"phase_2","mode":"full"}' > "$dir/doc/process/state.json"
 out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
