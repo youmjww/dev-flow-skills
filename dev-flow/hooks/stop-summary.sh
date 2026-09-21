@@ -17,7 +17,7 @@ if [ "$NEXT" = "完了" ]; then
 elif [ "$PHASE" = "phase_2" ]; then
   MSG="dev-flow: 要件定義完了（人間確認ゲート）。doc/requirements/ を確認後 /dev-flow で $NEXT へ進みます。"
 else
-  MSG="dev-flow: current_phase=${PHASE:-null} → 次: $NEXT（/dev-flow で続行）"
+  MSG="dev-flow: current_phase=${PHASE:-null} → 次: ${NEXT}（/dev-flow で続行）"
 fi
 
 jq -n --arg m "$MSG" '{systemMessage: $m}'

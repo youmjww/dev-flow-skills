@@ -1,0 +1,10 @@
+{
+  "number": 104,
+  "state": "OPEN",
+  "isDraft": false,
+  "baseRefName": "feature/xxx",
+  "headRefName": "dev/group-1",
+  "mergeable": "MERGEABLE",
+  "statusCheckRollup": [],
+  "url": "https://github.com/o/r/pull/104"
+}

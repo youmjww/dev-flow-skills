@@ -34,7 +34,15 @@
 
 ## 動作確認
 
-stdin に hook JSON を渡して単体で実行できます。
+スモークテストを用意しています。gh はスタブに差し替えるためネットワーク不要で、GNU（Linux）/ BSD（macOS）どちらの coreutils でも通ります。
+
+```bash
+bash tests/hooks/run.sh
+```
+
+hook を変更したら必ずこれを通してください。`stat` / `date` の方言差は `lib.sh` の `file_mtime` / `iso_to_epoch` に閉じ込めているので、新しい hook でもこれらを経由すること。
+
+stdin に hook JSON を渡して単体で実行することもできます。
 
 ```bash
 cd /path/to/project   # doc/process/state.json があるディレクトリ

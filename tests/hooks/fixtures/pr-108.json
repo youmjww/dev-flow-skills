@@ -1,0 +1,17 @@
+{
+  "number": 108,
+  "state": "OPEN",
+  "isDraft": false,
+  "baseRefName": "feature/yyy",
+  "headRefName": "dev/group-1",
+  "mergeable": "MERGEABLE",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "name": "ci",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS"
+    }
+  ],
+  "url": "https://github.com/o/r/pull/108"
+}

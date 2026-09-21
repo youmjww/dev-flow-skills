@@ -1,0 +1,2 @@
++++ b/migrations/002.sql
++ALTER TABLE users DROP COLUMN email;

@@ -1,0 +1,20 @@
+#!/bin/bash
+# テスト用の gh スタブ。GH_FIXTURE_DIR/pr-<N>.json と pr-<N>.diff を返す。
+set -e
+sub="$1 $2"
+case "$sub" in
+  "pr view")
+    n="$3"; f="$GH_FIXTURE_DIR/pr-$n.json"
+    [ -f "$f" ] || { echo "GraphQL: Could not resolve to a PullRequest with the number of $n." >&2; exit 1; }
+    # --jq が付いていれば適用（session-start.sh 用）
+    jqexpr=""
+    while [ $# -gt 0 ]; do [ "$1" = "--jq" ] && jqexpr="$2"; shift; done
+    if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$f"; else cat "$f"; fi
+    ;;
+  "pr diff")
+    n="$3"; f="$GH_FIXTURE_DIR/pr-$n.diff"
+    [ -f "$f" ] || { echo "no diff" >&2; exit 1; }
+    cat "$f"
+    ;;
+  *) echo "gh stub: unsupported: $*" >&2; exit 1 ;;
+esac

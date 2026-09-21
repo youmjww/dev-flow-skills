@@ -74,7 +74,7 @@ if printf '%s' "$BASE" | grep -qE "$PROTECTED"; then
   deny "dev-flow hook: PR #$PR のベース '$BASE' は保護ブランチです。main / develop 系へのマージは常に人間が行います。$URL"
 fi
 if ! printf '%s' "$BASE" | grep -qE "$BASE_PATTERN"; then
-  deny "dev-flow hook: PR #$PR のベース '$BASE' は自動マージ対象（$BASE_PATTERN）ではありません。人間にマージを依頼してください。$URL"
+  deny "dev-flow hook: PR #$PR のベース '$BASE' は自動マージ対象（${BASE_PATTERN}）ではありません。人間にマージを依頼してください。$URL"
 fi
 if state_valid; then
   EXPECTED_BASE="$(state_get '.phase_5_progress.base_branch')"
@@ -102,7 +102,7 @@ CHECKS="$(pv '
 case "$CHECKS" in
   OK) ;;
   NONE) deny "dev-flow hook: PR #$PR に CI チェックがありません。CI が無い PR は自動マージしません。$URL" ;;
-  *) deny "dev-flow hook: PR #$PR の CI が通っていません: $CHECKS。$URL" ;;
+  *) deny "dev-flow hook: PR #$PR の CI が通っていません: ${CHECKS}。$URL" ;;
 esac
 
 # ---- DB 破壊的変更 ----
@@ -119,4 +119,4 @@ $(printf '%s\n%s' "$HITS" "$TF_DEL" | sed '/^$/d' | sed 's/^/  /')"
 fi
 
 log_flow "event=auto_merge_allowed pr=$PR base=$BASE head=$HEAD_REF"
-allow "dev-flow hook: PR #$PR（$HEAD_REF → $BASE）は自動マージ条件（CI 全通過・コンフリクトなし・DB 破壊的変更なし・--merge）を満たしています。"
+allow "dev-flow hook: PR #${PR}（$HEAD_REF → ${BASE}）は自動マージ条件（CI 全通過・コンフリクトなし・DB 破壊的変更なし・--merge）を満たしています。"
