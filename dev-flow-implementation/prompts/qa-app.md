@@ -38,8 +38,13 @@ baseline_commit: `{BASELINE_COMMIT}`
 **2. ブロッカーチェック**
 - テスト定義書の内容が実装と根本的に矛盾すると判断した場合は、実装を中断してメインオーケストレーターに報告する
 
-**3. lint / format の実行**（worktree ディレクトリ内で実行）
-- `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する
+**2.5 規約**（テストの書き方はこれに従う）：
+{CONVENTIONS}
+
+**3. lint / format / 型検査の実行**（worktree ディレクトリ内で実行）
+- `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する。空なら下の標準コマンドを使う：
+{STANDARD_COMMANDS}
+- 最後に実行したコマンドと終了コードを完了 JSON の `result.lint` に必ず書く（0 以外だとレビューに進めない）
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
 - コミットメッセージ例: `test: {テスト名} を実装`
@@ -55,7 +60,8 @@ baseline_commit: `{BASELINE_COMMIT}`
   "status": "completed",
   "result": {
     "changed_files": {変更ファイル数},
-    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"]
+    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
+    "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0}
   },
   "confidence": 0.85,
   "uncertainty_points": [],

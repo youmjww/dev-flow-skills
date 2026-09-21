@@ -88,6 +88,10 @@ AskUserQuestion で提案を提示して確定する（間違いは人間に直�
 
 **test-spec の要点**: 既存テスト 1 つを TC 1 つに対応付け、frontmatter の `test_cases[].implemented_by` に `path::関数名` を入れる。compliance の機械的検証はこれを使って「TC が実装されているか」を判定する。既存テストが無い REQ には TC を**作らない**（as-is に無いものを捏造しない）。
 
+## STEP 4.5: プロジェクト規約の草案
+
+`doc/conventions.md` が無ければ、inventory と実コードから**観測できた**規約を草案として書く（`prompts/as-is-conventions.md`、`model="sonnet"`、同期）。命名パターン・ディレクトリ構成・エラー処理の流儀・テストの書き方・使っているリンタ設定を「現状こうなっている」として列挙し、`dev-flow-implementation/reference/conventions/<language>.md` と食い違う点は「言語標準と異なる（意図的か要確認）」と印を付ける。人間が STEP 5 で確認し、不要なら削除してよい。
+
 ## STEP 5: カバレッジ行列と人間レビュー
 
 **5a. カバレッジ行列**
@@ -98,7 +102,7 @@ AskUserQuestion で提案を提示して確定する（間違いは人間に直�
 
 AskUserQuestion で以下をまとめて提示する：
 
-- 生成した文書の一覧とサイズ
+- 生成した文書の一覧とサイズ（`doc/conventions.md` 草案を含む。言語標準と異なる点の一覧）
 - `confidence: low` の REQ 一覧（推測した振る舞い）
 - 未カバー REQ の件数と上位 10 件
 - 選択肢: 「このまま確定」/「low の REQ を一緒に確認する」/「範囲を変えてやり直す」
