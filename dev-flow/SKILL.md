@@ -40,6 +40,16 @@ hook からの `additionalContext` に「task_checklist.md のフェーズ進捗
 
 ---
 
+## パーミッションモードの前提
+
+サブエージェントは**親セッションのパーミッションモードを継承**する（Agent ツールの `mode` 引数は無視される）。そのため：
+
+- **プランモード（読み取り専用）で `/dev-flow` を起動しない。** writer / implementer が書き込めずに止まる。hook 導入環境では `pre-agent-check.sh` が `permission_mode = "plan"` のとき `phase-*-agent` の起動を `deny` する。deny されたら「プランモードを抜けて（Shift+Tab）から再実行してください」と案内して終了する
+- 推奨は `acceptEdits` 以上。`default` でも動くが、各サブエージェントの Write / Bash がすべて親セッションの確認プロンプトに上がってくる
+- 計画フェーズはプランモードではなく Phase 1-2 / 3-4 / 4.5 のドキュメントと人間確認ゲートが担う。プランモードを併用しない
+
+---
+
 ## フロー実行
 
 ### STEP 1: 引数の解析

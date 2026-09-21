@@ -24,7 +24,7 @@ E2E テストあり: `{IS_E2E}`
 
 ## Phase 6a: test-runner-haiku を同期起動
 
-以下の設定で `test-runner-haiku` を起動します（`name="test-runner-haiku"`, `run_in_background=false`, `model="haiku"`, `mode="acceptEdits"`）：
+以下の設定で `test-runner-haiku` を起動します（`name="test-runner-haiku"`, `run_in_background=false`, `model="haiku"`）：
 
 **test-runner-haiku プロンプト:**
 
@@ -74,7 +74,7 @@ Agent 呼び出しが返ったら最終回答を読み取ります：
 
 ## Phase 6c: Sonnet へ昇格（Haiku が2回失敗した場合のみ実行）
 
-以下の設定で `test-runner-sonnet` を起動します（`name="test-runner-sonnet"`, `run_in_background=false`, `model="sonnet"`, `mode="acceptEdits"`）：
+以下の設定で `test-runner-sonnet` を起動します（`name="test-runner-sonnet"`, `run_in_background=false`, `model="sonnet"`）：
 
 **test-runner-sonnet プロンプト:**
 

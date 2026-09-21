@@ -36,7 +36,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。writer・revi
 
 ### 3a. writer の並列起動
 
-以下のうち起動条件を満たすものを **同一ターンで同時に**起動します（`run_in_background=true`, `model="sonnet"`, `mode="acceptEdits"`）。プロンプトは各ファイルを Read し、プレースホルダーを実際の値に置換してから Agent に渡してください。
+以下のうち起動条件を満たすものを **同一ターンで同時に**起動します（`run_in_background=true`, `model="sonnet"`）。プロンプトは各ファイルを Read し、プレースホルダーを実際の値に置換してから Agent に渡してください。
 
 | name | プロンプトファイル | プレースホルダー | 起動条件 |
 |---|---|---|---|
@@ -135,7 +135,7 @@ AskUserQuestion ツールで以下を同時に提示してレビューを依頼�
 
 **SendMessage で再開できない場合（writer が破棄済み等）:**
 Agent ツールで同じ `name` を使って新規起動し、修正依頼プロンプトを直接渡してください。
-例: `Agent(name="test-spec-writer", run_in_background=true, model="sonnet", mode="acceptEdits", prompt="以下の指摘を反映して {TEST_SPEC_PATH} を修正してください: {指摘内容}。完了したら修正内容の要約を最終回答で返してください。")`
+例: `Agent(name="test-spec-writer", run_in_background=true, model="sonnet", prompt="以下の指摘を反映して {TEST_SPEC_PATH} を修正してください: {指摘内容}。完了したら修正内容の要約を最終回答で返してください。")`
 
 ---
 

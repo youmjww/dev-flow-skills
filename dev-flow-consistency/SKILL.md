@@ -163,11 +163,11 @@ Phase 4.5a（整合性チェック）完了後、以下の手順で `doc/process
 
 Agent Teams（`TeamCreate` / `team_name`）は使用しません。以下の 2 エージェントを **同一ターンで同時に** 名前付きバックグラウンドサブエージェントとして起動し、それぞれの完了通知（最終回答）を本エージェントが受け取ります。中間オーケストレーター（旧 `consistency-orchestrator`）は置きません。
 
-### タスクチェックリスト生成（`run_in_background=true`, `model="sonnet"`, `name="checklist-writer"`, `mode="acceptEdits"`）
+### タスクチェックリスト生成（`run_in_background=true`, `model="sonnet"`, `name="checklist-writer"`）
 
 プロンプトは `prompts/checklist-writer.md` を Read ツールで読み込み、プレースホルダー（`{MODE}`, `{BASELINE_COMMIT}`, `{REQUIREMENTS_PATHS}` 等）を実際の値に置換してから Agent に渡してください。
 
-### スペックキャッシュ生成（`run_in_background=true`, `model="sonnet"`, `name="spec-cache-writer"`, `mode="acceptEdits"`）
+### スペックキャッシュ生成（`run_in_background=true`, `model="sonnet"`, `name="spec-cache-writer"`）
 
 プロンプトは `prompts/spec-cache-writer.md` を Read ツールで読み込み、プレースホルダー（`{MODE}`, `{BASELINE_COMMIT}`, `{REQUIREMENTS_PATHS}` 等）を実際の値に置換してから Agent に渡してください。
 

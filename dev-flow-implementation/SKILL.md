@@ -283,7 +283,7 @@ JSON パース失敗時のフォールバックは reference 参照。
 
 #### Dev (Infra) レビュー（Infra / Cross グループ）
 
-Agent を起動（同期実行、`run_in_background=false`, `model="opus"`, `disallowed_tools=["Edit","Write","NotebookEdit"]`）：
+Agent を起動（同期実行、`run_in_background=false`, `model="opus"`）。現行の Agent ツールにはツール制限パラメータが無いため、プロンプト冒頭に「**ファイルの編集・作成は禁止。Read / Grep / Bash（読み取り系）のみで確認し、指摘は最終回答で返す**」を必ず含める：
 
 ```
 あなたは Infra Dev チームの**懐疑的レビュアー（Skeptical Reviewer）**です。
@@ -312,17 +312,17 @@ git diff や git log などの読み取り系 Bash コマンドは使用可能�
 
 #### Dev (App) レビュー（App / Cross グループ）
 
-同様に App Dev のシニアレビュアーエージェントを起動（`model="opus"`, `disallowed_tools=["Edit","Write","NotebookEdit"]`、懐疑的レビュアー観点: セキュリティ・新人可読性・アーキテクチャ）。
+同様に App Dev のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記、懐疑的レビュアー観点: セキュリティ・新人可読性・アーキテクチャ）。
 指摘あり → dev-implementer-app-group-N を再起動して修正（最大5回）。
 
 #### QA (Infra) レビュー（Infra / Cross グループ）
 
-Infra QA のシニアレビュアーエージェントを起動（`model="opus"`, `disallowed_tools=["Edit","Write","NotebookEdit"]`）。
+Infra QA のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記）。
 QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。テスト網羅性・独立性・副作用を確認。指摘あり → qa-implementer-infra-group-N を再起動して修正（最大5回）。
 
 #### QA (App) レビュー（App / Cross グループ）
 
-App QA のシニアレビュアーエージェントを起動（`model="opus"`, `disallowed_tools=["Edit","Write","NotebookEdit"]`、QA 素朴質問観点）。
+App QA のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記、QA 素朴質問観点）。
 テスト網羅性・独立性を確認。指摘あり → qa-implementer-app-group-N を再起動して修正（最大5回）。
 
 

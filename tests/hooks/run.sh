@@ -91,7 +91,7 @@ run_hook() {
 hook_rc()  { cat "$HOOK_RC_FILE"; }
 hook_err() { cat "$HOOK_ERR_FILE"; }
 
-agent_json() { jq -n --arg n "$1" --arg m "${2:-haiku}" '{tool_name:"Agent",tool_input:{name:$n,model:$m}}'; }
+agent_json() { jq -n --arg n "$1" --arg m "${2:-haiku}" --arg pm "${3:-acceptEdits}" '{tool_name:"Agent",permission_mode:$pm,tool_input:{name:$n,model:$m}}'; }
 bash_json()  { jq -n --arg c "$1" '{tool_name:"Bash",tool_input:{command:$c}}'; }
 write_json() { jq -n --arg f "$1" '{tool_name:"Write",tool_input:{file_path:$f}}'; }
 
@@ -133,6 +133,13 @@ assert_empty "Phase 1-2 は state.json 無しでも許可" "$out"
 
 out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
 assert_eq "state.json 無しで phase-spec-agent は deny" "$(decision "$out")" "deny"
+
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-requirements-agent opus plan)")"
+assert_eq "プランモードでは Phase 1-2 でも deny" "$(decision "$out")" "deny"
+assert_contains "プランモード deny の理由" "$(reason "$out")" "プランモード"
+
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json some-other-agent haiku plan)")"
+assert_empty "プランモードでも phase-*-agent 以外は素通り" "$out"
 
 printf '{broken' > "$dir/doc/process/state.json"
 out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
