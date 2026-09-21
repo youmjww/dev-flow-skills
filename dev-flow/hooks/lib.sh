@@ -16,7 +16,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(jqi '.cwd // empty')}"
 : "${PROJECT_DIR:=$PWD}"
 
 PROCESS_DIR="$PROJECT_DIR/doc/process"
-STATE="$PROCESS_DIR/state.json"
+STATE="$PROCESS_DIR/state.json"   # 注意: 各 hook では STATE を再代入しないこと（PR の state 等は PR_STATE などを使う）
 CHECKLIST="$PROCESS_DIR/task_checklist.md"
 FLOW_LOG="$PROCESS_DIR/flow.log"
 
@@ -181,6 +181,12 @@ slack_notify() {
 # PreToolUse: 実行を拒否して理由を Claude に返す
 deny() {
   jq -n --arg r "$1" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+  exit 0
+}
+
+# PreToolUse: 条件検証済みとして許可し、理由を Claude に返す
+allow() {
+  jq -n --arg r "$1" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: $r}}'
   exit 0
 }
 

@@ -1,0 +1,32 @@
+# DB 破壊的変更の検出パターン（grep -iE -f で PR diff の追加行に適用）
+# 1 行 1 パターン。# で始まる行と空行は無視される。
+# 誤検知は「自動マージしない」側に倒れるだけなので、疑わしいものは広く拾う。
+
+# --- 生 SQL ---
+DROP[[:space:]]+(TABLE|COLUMN|INDEX|DATABASE|SCHEMA|VIEW|SEQUENCE|TYPE|CONSTRAINT)
+ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP[[:space:]]
+ALTER[[:space:]]+TABLE[^;]*(ALTER|MODIFY|CHANGE)[[:space:]]+COLUMN
+ALTER[[:space:]]+TABLE[^;]*[[:space:]]RENAME[[:space:]]
+ALTER[[:space:]]+TABLE[^;]*[[:space:]]TYPE[[:space:]]
+TRUNCATE[[:space:]]
+# WHERE の無い DELETE FROM は pr-merge-guard.sh 側で別途判定（ERE では否定先読みが書けないため）
+
+# --- Rails / ActiveRecord ---
+\b(drop_table|remove_column|remove_columns|rename_column|rename_table|change_column|change_column_null|remove_index|remove_reference|remove_belongs_to|drop_join_table|remove_timestamps)\b
+
+# --- Django ---
+migrations\.(DeleteModel|RemoveField|RenameField|RenameModel|AlterField|AlterModelTable)
+
+# --- Alembic (SQLAlchemy) ---
+op\.(drop_table|drop_column|alter_column|rename_table|drop_index|drop_constraint)
+
+# --- TypeORM / Knex / Sequelize / Prisma migrate SQL ---
+\.(dropTable|dropColumn|dropColumns|renameColumn|alterColumn|dropIndex|changeColumn|removeColumn|renameTable|dropForeign|dropUnique|dropPrimary)\(
+
+# --- Go (goose / golang-migrate / ent / gorm) ---
+\.(DropTable|DropColumn|RenameColumn|AlterColumn|DropIndex|DropConstraint)\(
+
+# --- Terraform（DB リソースの破壊を許す設定） ---
+skip_final_snapshot[[:space:]]*=[[:space:]]*true
+deletion_protection[[:space:]]*=[[:space:]]*false
+force_destroy[[:space:]]*=[[:space:]]*true

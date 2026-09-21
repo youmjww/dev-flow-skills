@@ -400,11 +400,27 @@ dev-flow-skills/
 | `state.json` 書き込み後 | JSON 検証（壊れていれば差し戻し）、`task_checklist.md` のフェーズ進捗を同期、`flow.log` に遷移を記録 |
 | `escalation_*.md` 生成後 | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` を設定していれば Slack に通知（未設定なら通信なし） |
 | `phase-*-agent` 完了後 | 所要時間を `flow.log` に記録。Phase 2 完了時は人間確認ゲートを念押し |
+| `gh pr merge` 実行前 | 自動マージ条件を検証。`feature/*` 向けの作業ブランチ PR で、CI 全通過・コンフリクトなし・DB 破壊的変更なし・`--merge` 方式のときだけ許可。`main` / `develop` 向けは常に拒否 |
 | セッション開始 / 応答完了 | 進行中フローの現在フェーズと次アクションを表示 |
 
 dev-flow を使っていないプロジェクト（`doc/process/state.json` がない、`phase-*-agent` を起動しない）では何もしません。詳細・単体テスト方法は [`dev-flow/hooks/README.md`](dev-flow/hooks/README.md) を参照してください。
 
 Slack 通知を有効にするには `~/.claude/settings.json` の `env` に `SLACK_BOT_TOKEN` と `DEV_FLOW_SLACK_CHANNEL`（例: `#dev-flow-alerts`）を設定します。
+
+### Phase 5 の PR マージ（非ブロッキング・条件付き自動マージ）
+
+```
+main ← develop ← feature/xxx ← dev/app-group-1, qa/app-group-1, ...
+```
+
+Phase 5 は `feature/xxx`（まとめブランチ）上で実行し、各グループの作業ブランチから `feature/xxx` へ PR を作ります。PR 作成後、`gh pr merge <N> --merge` を試行し、hook が次の条件をすべて満たすと判定した場合だけマージされます。
+
+- ベースが `feature/*`（`DEV_FLOW_AUTO_MERGE_BASE_PATTERN` で変更可）で、`state.json` の `base_branch` と一致
+- CI チェックがすべて成功（CI の無い PR は対象外）
+- コンフリクトなし
+- DB の破壊的変更（DROP / TRUNCATE / カラム削除・型変更・リネーム、ORM マイグレーションの remove / rename / alter 系、Terraform の DB リソース削除など）を含まない
+
+条件を満たさない PR は人間がレビュー・マージします。オーケストレーターはマージを待たずに終了し、次に `/dev-flow` を実行したときにマージ済み PR を取り込んで続きを進めます（セッション開始時に待ち PR の一覧が表示されます）。`feature/xxx → develop`、`develop → main` の PR は常に人間がマージします。hooks を導入していない環境では自動マージは行いません。
 
 ---
 

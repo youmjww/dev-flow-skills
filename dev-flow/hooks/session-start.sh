@@ -24,6 +24,28 @@ else
   echo "dev-flow: 続行するには /dev-flow を実行してください。"
 fi
 
+# Phase 5 で人間マージ待ちの PR があれば状態を表示（非ブロッキング再入の入口）
+if [ "$PHASE" = "phase_4_5" ] && [ "$(state_get '.phase_5_progress.pr_numbers | length')" != "" ]; then
+  PENDING="$(jq -r '
+    .phase_5_progress as $p
+    | ($p.pr_numbers // {}) | to_entries[]
+    | select(.key as $g | ($p.completed_groups // []) | index($g) | not)
+    | .key as $g | (.value | if type == "array" then .[] else . end) | select(. != null)
+    | "\($g) \(.)"' "$STATE" 2>/dev/null)"
+  if [ -n "$PENDING" ]; then
+    echo "dev-flow Phase 5 マージ待ち PR:"
+    while read -r group num; do
+      if command -v gh >/dev/null 2>&1; then
+        ST="$(cd "$PROJECT_DIR" && gh pr view "$num" --json state,mergeable,baseRefName --jq '"\(.state) mergeable=\(.mergeable) base=\(.baseRefName)"' 2>/dev/null || echo "状態取得失敗")"
+      else
+        ST="（gh なし）"
+      fi
+      echo "  $group: PR #$num $ST"
+    done <<< "$PENDING"
+    echo "dev-flow: /dev-flow を実行すると MERGED の PR を取り込み、OPEN の PR は自動マージ条件を再判定します。"
+  fi
+fi
+
 if [ -f "$FLOW_LOG" ]; then
   echo "dev-flow 最近のイベント:"
   tail -3 "$FLOW_LOG" | sed 's/^/  /'
