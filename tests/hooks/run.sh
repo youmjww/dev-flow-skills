@@ -138,6 +138,8 @@ bad="$(grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]' "$HOOKS"/*.sh "$ROOT/setu
 assert_empty "変数直後にマルチバイト文字が続く箇所が無い（\${VAR} を使う）" "$bad"
 for f in "$HOOKS"/*.sh "$ROOT/setup.sh"; do bash -n "$f" 2>/dev/null || fail "構文: $f"; done
 ok "全 hook が bash -n を通る"
+conv="$(python3 "$ROOT/tests/check-conventions.py" 2>&1)"
+assert_contains "conventions/*.md の構造（セクション・ルール ID・重大度）" "$conv" "conventions: 0 errors"
 
 # ---------------------------------------------------------------------------
 # pre-agent-check.sh

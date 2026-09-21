@@ -42,6 +42,8 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 **1. タスクを1件選んで実装する**
 - `{TECH_STACK.language}` / `{TECH_STACK.framework}` で実装する
 - 既存コードのスタイル・規約に従う
+- **以下の規約を守る**（言語・フレームワーク・プロジェクトの順。矛盾する場合は後のものが優先）：
+{CONVENTIONS}
 - テスト定義書を参照し、テストから呼び出しやすいインターフェース設計にする
 
 **2. ブロッカーチェック**
@@ -64,8 +66,10 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 }
 ```
 
-**3. lint / format の実行**（worktree ディレクトリ内で実行）
-- `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する
+**3. lint / format / 型検査の実行**（worktree ディレクトリ内で実行）
+- `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する。空なら下の標準コマンドを使う：
+{STANDARD_COMMANDS}
+- 最後に実行したコマンドと終了コードを完了 JSON の `result.lint` に必ず書く（0 以外だとレビューに進めない）
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
 
@@ -109,7 +113,8 @@ Tests: TC-001, TC-002
   "status": "completed",
   "result": {
     "changed_files": {変更ファイル数},
-    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"]
+    "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
+    "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0}
   },
   "confidence": 0.85,
   "uncertainty_points": [

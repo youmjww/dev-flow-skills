@@ -218,9 +218,11 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 各エージェント起動前に、以下を順にプロンプトへ注入する。詳細は [reference/agent-prompt-injection.md](reference/agent-prompt-injection.md) を参照。
 
-1. **memory フィードバック**: `~/.claude/projects/$(pwd | sed 's|/|-|g')/memory/` 配下の `feedback_review_*.md` / `feedback_test_failures.md` を読み込んでプロンプト冒頭に追記
-2. **ファイルスコープガードレール**: 担当 worktree 配下の作業許可パターンと禁止パターンを明示
-3. **Opus 昇格時**: Sonnet 試行履歴と未解決指摘を冒頭に追記
+0. **規約のバージョン照合**: `doc/process/conventions_verified.md` が無い、または `verified_for` のバージョンが `tech_stack.language_version` / `framework_version` と違う場合、[reference/conventions/version-check.md](reference/conventions/version-check.md) の手順で `conventions-verifier` エージェント（`model="sonnet"`、WebFetch 使用）を先に実行して生成する。バージョンが未検出ならマニフェストから検出して `tech_stack` に書き戻す。WebFetch が使えない環境では「未検証」と明記して先へ進む（止めない）
+1. **言語・フレームワーク規約**: `state.json.tech_stack` から [reference/conventions/README.md](reference/conventions/README.md) の選択ルールで `conventions/<language>.md` → `conventions/<framework>.md` → `{project}/doc/conventions.md` を Read し、「書き方」セクションを implementer に、「レビューチェックリスト」を reviewer に、「標準コマンド」を両方に注入する（`{CONVENTIONS}` / `{REVIEW_CHECKLIST}` / `{STANDARD_COMMANDS}` プレースホルダー）。`conventions_verified.md` の「変わった項目」「新しい推奨」は両プレースホルダーの**先頭**に「バージョン照合結果（規約ファイルより優先）」として置く。対応ファイルが無い言語は `_template.md` の観点だけで進め、最終報告で「規約ファイル未整備」と伝える
+2. **memory フィードバック**: `~/.claude/projects/$(pwd | sed 's|/|-|g')/memory/` 配下の `feedback_review_*.md` / `feedback_test_failures.md` を読み込んでプロンプト冒頭に追記
+3. **ファイルスコープガードレール**: 担当 worktree 配下の作業許可パターンと禁止パターンを明示
+4. **Opus 昇格時**: Sonnet 試行履歴と未解決指摘を冒頭に追記
 
 **昇格ラダー（Dev/QA implementer）:**
 
@@ -254,7 +256,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 | status | blocker_type | 対応 |
 |---|---|---|
-| `"completed"` | — | `result.commits` をログに記録して次の処理へ進む |
+| `"completed"` | — | `result.lint.exit_code` が **0 以外、または欠損**なら「lint / format / 型検査が通っていない」として同じ implementer を `SendMessage` で再開して解消させる（最大 2 回、それでも通らなければ `failed` 扱い）。0 なら `result.commits` をログに記録して次の処理へ進む |
 | `"blocked"` | `"plan_repair_needed"` | **Plan Repair フローへ移行**（下記参照） |
 | `"blocked"` | その他 | AskUserQuestion で人間に判断を仰ぐ |
 | `"failed"` | — | AskUserQuestion で人間に報告し指示を仰ぐ |
@@ -302,28 +304,45 @@ git diff や git log などの読み取り系 Bash コマンドは使用可能�
 - **新人視点**: コードを読んで意図が理解できるか、命名が適切か
 - **アーキテクチャ視点**: 拡張性・将来の保守コスト・依存関係
 
-これら3観点のうち最も重大なリスクを持つ1〜2点に絞って指摘してください（全部指摘しない）。
+**規約チェックリスト（照合必須）:**
+{REVIEW_CHECKLIST}
+（言語・フレームワーク・プロジェクト規約のルール ID・重大度・確認方法。「確認方法」の grep は実際に実行して確認する）
 
-指摘あり → 具体的な修正箇所と理由を報告
-指摘なし → 「承認」と報告
+**出力（最終回答。SendMessage は使わない）:**
+
+blocker / major は**見つけたものをすべて**挙げる。minor は最大 3 件まで（記録用。修正は求めない）。上の 3 観点で見つけた規約外の問題も、該当ルールが無ければ `rule: "review/<短い名前>"` で報告する。
+
+```json
+{
+  "reviewer": "dev-infra-group-N",
+  "status": "approved | changes_requested",
+  "findings": [
+    {"severity": "blocker", "rule": "go/sql-injection", "file": "internal/repo/user.go", "line": 42, "problem": "WHERE 句を Sprintf で組み立てている", "fix": "プレースホルダ $1 と引数渡しに変える"},
+    {"severity": "minor", "rule": "go/naming", "file": "internal/repo/user.go", "line": 10, "problem": "レシーバ名が r と repo で混在", "fix": "r に統一"}
+  ],
+  "checked_rules": ["go/sql-injection", "go/errors-wrap", "..."]
+}
 ```
 
-指摘あり → dev-implementer-infra-group-N を再起動して修正（最大5回）。レビュアーは初回から Opus を使用するため、追加昇格は行わない。
+`status` は blocker または major が 1 件でもあれば `changes_requested`、それ以外は `approved`。
+```
+
+`changes_requested` → `findings` のうち blocker / major を dev-implementer-infra-group-N に `SendMessage` で渡して修正（最大5回）。minor は memory 蓄積用に記録するだけで修正ループに回さない。レビュアーは初回から Opus を使用するため、追加昇格は行わない。同じ `rule` が 3 回以上出たら [reference/agent-prompt-injection.md](reference/agent-prompt-injection.md) の手順で memory に保存する。
 
 #### Dev (App) レビュー（App / Cross グループ）
 
-同様に App Dev のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記、懐疑的レビュアー観点: セキュリティ・新人可読性・アーキテクチャ）。
-指摘あり → dev-implementer-app-group-N を再起動して修正（最大5回）。
+同様に App Dev のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記、懐疑的レビュアー観点: セキュリティ・新人可読性・アーキテクチャ、`{REVIEW_CHECKLIST}` の照合、同じ JSON 出力）。
+`changes_requested` → blocker / major を dev-implementer-app-group-N に渡して修正（最大5回）。
 
 #### QA (Infra) レビュー（Infra / Cross グループ）
 
 Infra QA のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記）。
-QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。テスト網羅性・独立性・副作用を確認。指摘あり → qa-implementer-infra-group-N を再起動して修正（最大5回）。
+QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。テスト網羅性・独立性・副作用と、`{REVIEW_CHECKLIST}` のうちテストに関するルール（`*/table-driven` `*/parametrize` `*/test-*` 等）を確認。出力は Dev レビューと同じ JSON。`changes_requested` → qa-implementer-infra-group-N に渡して修正（最大5回）。
 
 #### QA (App) レビュー（App / Cross グループ）
 
 App QA のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記、QA 素朴質問観点）。
-テスト網羅性・独立性を確認。指摘あり → qa-implementer-app-group-N を再起動して修正（最大5回）。
+テスト網羅性・独立性と `{REVIEW_CHECKLIST}` のテスト関連ルールを確認。出力は同じ JSON。`changes_requested` → qa-implementer-app-group-N に渡して修正（最大5回）。
 
 
 ---
