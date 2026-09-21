@@ -1,13 +1,13 @@
 ---
 name: dev-flow-compliance
-description: AI駆動開発フローの準拠チェックフェーズ（Phase 7-8）。カバレッジ行列で TC-NNN・API-NNN の実装存在を機械的に検証し、実装がドキュメントに完全準拠しているか確認します。乖離は実装ミス/仕様変更に分類して対応し、完了レポートを生成して `doc/process/state.json` を削除しフローを終了します。Phase 6 テスト通過後、または `--from=compliance` 起動時に使用します。
+description: AI駆動開発フローの compliance ステージ（6/6: 準拠チェック・完了報告）。カバレッジ行列で TC-NNN・API-NNN の実装存在を機械的に検証し、実装がドキュメントに完全準拠しているか確認します。乖離は実装ミス/仕様変更に分類して対応し、完了レポートを生成して `doc/process/state.json` を削除しフローを終了します。test 通過後、または `--from=compliance` 起動時に使用します。
 model: opus
 allowed-tools: Read Write Edit Bash AskUserQuestion
 paths: doc/process/state.json
 ---
 
 
-# Phase 7-8: ドキュメント準拠チェックと完了報告
+# Stage 6/6 compliance: ドキュメント準拠チェックと完了報告
 
 ## 入力
 
@@ -20,11 +20,11 @@ paths: doc/process/state.json
 - is_gui
 - tech_stack
 
-## Phase 7-pre: カバレッジ行列による機械的検証
+## STEP 1: カバレッジ行列による機械的検証
 
-ドキュメント準拠チェック（Phase 7）の前に、`doc/process/coverage_matrix.md` を使って以下の機械的検証を実行します。
+ドキュメント準拠チェック（STEP 2）の前に、`doc/process/coverage_matrix.md` を使って以下の機械的検証を実行します。
 
-**coverage_matrix.md が存在しない場合:** この Phase 7-pre をスキップして Phase 7 に進みます。
+**coverage_matrix.md が存在しない場合:** この STEP 1 をスキップして STEP 2 に進みます。
 
 **検証手順:**
 
@@ -61,11 +61,11 @@ git log --oneline --all | grep -E "REQ-[0-9]+" | head -20
 | REQ-002 | ❌ TC-003 が見つからない | ✅ | 準拠違反 |
 ```
 
-**準拠違反の場合:** Phase 7 の通常チェックと合わせて乖離として報告します。
+**準拠違反の場合:** STEP 2 の通常チェックと合わせて乖離として報告します。
 
 ---
 
-## Phase 7: ドキュメント準拠チェック
+## STEP 2: ドキュメント準拠チェック
 
 テスト通過後、実装がドキュメントに完全に準拠しているかを確認します。
 
@@ -132,7 +132,7 @@ find . -type f \
   git add {修正したファイル}
   git commit -m "fix: ドキュメント準拠修正 - {修正内容の概要}"
   ```
-- コミット後、完了報告に「Phase 6 再実行が必要」と記載する
+- コミット後、完了報告に「test 再実行が必要」と記載する
 
 **5. B カテゴリの報告**
 
@@ -153,11 +153,11 @@ find . -type f \
 ```
 
 人間の判断：
-- 「実装を修正する」→ A カテゴリと同様に実装を修正し、Phase 6 再実行が必要と記載
+- 「実装を修正する」→ A カテゴリと同様に実装を修正し、test 再実行が必要と記載
 - 「仕様変更として承認する」→ **仕様変更フロー**を実行する
 
 **6. 乖離なしの場合**
-- 完了を報告して Phase 8 へ進む
+- 完了を報告して STEP 3 へ進む
 
 ---
 
@@ -165,25 +165,25 @@ find . -type f \
 
 メインオーケストレーターが以下を順に実行する：
 1. 承認された変更内容で該当ドキュメント（要件定義書・API仕様書）を Edit ツールで修正する
-2. `doc/process/state.json` の `current_phase` を `"phase_4"` に戻して保存する
-3. `doc/process/task_checklist.md` のフェーズ進捗を以下に戻す：
-   - `- [x] Phase 4.5: 整合性チェック・設計凍結` → `- [ ]`
-   - `- [x] Phase 5: 並列実装（Dev / QA）` → `- [ ]`（完了済みだった場合）
-   - `- [x] Phase 6: テスト実行` → `- [ ]`（完了済みだった場合）
-4. 人間に「仕様変更を反映しました。`/dev-flow` を実行して整合性チェック（Phase 4.5）からやり直してください」と通知する
+2. `doc/process/state.json` の `next_stage` を `"consistency"` に戻して保存する
+3. `doc/process/task_checklist.md` の「ステージ進捗」を以下に戻す（hook 導入環境では state.json 書き込み時に自動同期されるので不要）：
+   - `- [x] 3. consistency: ...` → `- [ ]`
+   - `- [x] 4. implementation: ...` → `- [ ]`（完了済みだった場合）
+   - `- [x] 5. test: ...` → `- [ ]`（完了済みだった場合）
+4. 人間に「仕様変更を反映しました。`/dev-flow` を実行して consistency（整合性チェック）からやり直してください」と通知する
 
 ---
 
-**Phase 6 再実行フロー（A カテゴリ修正後）**
+**test 再実行フロー（A カテゴリ修正後）**
 
-1. `doc/process/state.json` の `current_phase` を `"phase_5"` に戻して保存する
-2. `doc/process/task_checklist.md` のフェーズ進捗を以下に戻す：
-   - `- [x] Phase 6: テスト実行` → `- [ ]`
-3. 人間に「実装を修正しました。`/dev-flow` を実行してテスト実行（Phase 6）からやり直してください」と通知する
+1. `doc/process/state.json` の `next_stage` を `"test"` に戻して保存する
+2. `doc/process/task_checklist.md` の「ステージ進捗」を以下に戻す（hook 導入環境では自動同期されるので不要）：
+   - `- [x] 5. test: ...` → `- [ ]`
+3. 人間に「実装を修正しました。`/dev-flow` を実行して test（テスト実行）からやり直してください」と通知する
 
 ---
 
-## Phase 8: 人間への完了報告
+## STEP 3: 人間への完了報告
 
 準拠チェック完了（乖離なし）を確認したら、以下の形式で報告：
 
@@ -206,7 +206,7 @@ find . -type f \
 - 仕様変更承認: （B カテゴリで人間が承認した仕様変更の概要、なければ「なし」）
 
 ### レビュー概要
-git log で Phase 5 のコミット履歴を確認し、fix: / chore: プレフィックスのコミットから主な修正内容を要約する：
+git log で implementation のコミット履歴を確認し、fix: / chore: プレフィックスのコミットから主な修正内容を要約する：
 ```bash
 git log --oneline --grep="^fix\|^chore" -- .
 ```
@@ -218,6 +218,6 @@ git log --oneline --grep="^fix\|^chore" -- .
 
 完了レポートを送信したら、以下を実行：
 
-1. `doc/process/state.json` の `current_phase` を `"completed"` に更新して保存（hooks が `task_checklist.md` のフェーズ進捗を全完了に同期し、`flow.log` に完了を記録する）
+1. `doc/process/state.json` の `next_stage` を `"completed"` に更新して保存（hooks が `task_checklist.md` のステージ進捗を全完了に同期し、`flow.log` に完了を記録する）
 2. `doc/process/state.json` を削除（フロー完了のため不要）
-3. 人間に「すべてのフェーズが完了しました」と通知
+3. 人間に「すべてのステージが完了しました」と通知

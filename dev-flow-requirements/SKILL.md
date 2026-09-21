@@ -1,11 +1,11 @@
 ---
 name: dev-flow-requirements
-description: AI駆動開発フローの要件定義フェーズ（Phase 1-2）。ユーザーと対話しながら要件を深掘りして要件定義書を作成し、曖昧表現リント・用語集整備・REQ-NNN ID付与を行います。技術スタック・GUI/API/E2Eフラグを確定して `doc/process/state.json` を生成します。新規開発フローの初回起動時、または `--from=requirements` で要件から再開する時に使用します。
+description: AI駆動開発フローの requirements ステージ（1/6: 要件定義）。ユーザーと対話しながら要件を深掘りして要件定義書を作成し、曖昧表現リント・用語集整備・REQ-NNN ID付与を行います。技術スタック・GUI/API/E2Eフラグを確定して `doc/process/state.json` を生成します。新規開発フローの初回起動時、または `--from=requirements` で要件から再開する時に使用します。
 model: opus
 allowed-tools: Read Write Edit Bash AskUserQuestion
 ---
 
-# Phase 1-2: 要件定義
+# Stage 1/6 requirements: 要件定義
 
 ## 入力
 
@@ -16,7 +16,7 @@ allowed-tools: Read Write Edit Bash AskUserQuestion
 - is_api
 - is_e2e
 
-## Phase 1: 要件定義
+## STEP 1: 要件定義（対話）
 
 ### 1a. 既存要件定義書の検索
 
@@ -149,7 +149,7 @@ tech_stack = {
 
 ---
 
-## Phase 2: 要件定義書レビュー
+## STEP 2: 要件定義書レビュー
 
 AskUserQuestion ツールを使用してブロッキングレビューを行います。
 
@@ -177,7 +177,7 @@ AskUserQuestion ツールを使用してブロッキングレビューを行い�
 ```
 
 - 「承認する」→ 状態保存後に完了
-- 「修正が必要」→ 指摘内容を受けて Phase 1 に戻る
+- 「修正が必要」→ 指摘内容を受けて STEP 1 に戻る
 
 ---
 
@@ -192,7 +192,7 @@ AskUserQuestion ツールを使用してブロッキングレビューを行い�
 2. 以下の内容で `doc/process/state.json` を作成：
    ```json
    {
-     "current_phase": "phase_2",
+     "next_stage": "spec",
      "mode": "{オーケストレーターから渡された mode（"full" または "incremental"）}",
      "baseline_commit": "{オーケストレーターから渡された baseline_commit（null または コミットハッシュ）}",
      "requirements_paths": [REQUIREMENTS_PATHS],
@@ -214,4 +214,4 @@ AskUserQuestion ツールを使用してブロッキングレビューを行い�
      "from": "requirements"
    }
    ```
-3. 人間に「Phase 2 完了。次は `/dev-flow` を実行して Phase 3 に進んでください」と通知
+3. 人間に「requirements 完了。要件定義書を確認後、`/dev-flow` を実行して spec（仕様書生成）に進んでください」と通知

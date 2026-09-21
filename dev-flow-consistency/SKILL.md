@@ -1,27 +1,27 @@
 ---
 name: dev-flow-consistency
-description: AI駆動開発フローの整合性チェックフェーズ（Phase 4.5）。トレーサビリティID整合性とドキュメント間の矛盾を検出し、カバレッジ行列（REQ × TC × API）を生成、タスクを Infra/App/Cross + DAG `depends_on` に分類して設計を凍結します。`mode=incremental` 時は Impact Analysis で baseline_commit 以降の差分のみを抽出します。ドキュメント生成承認後、または `--from=consistency` 起動時に使用します。
+description: AI駆動開発フローの consistency ステージ（3/6: 整合性チェック）。plan_repair（implementation 内の計画修正）も mini モードとして担当します。トレーサビリティID整合性とドキュメント間の矛盾を検出し、カバレッジ行列（REQ × TC × API）を生成、タスクを Infra/App/Cross + DAG `depends_on` に分類して設計を凍結します。`mode=incremental` 時は Impact Analysis で baseline_commit 以降の差分のみを抽出します。ドキュメント生成承認後、または `--from=consistency` 起動時に使用します。
 model: haiku
 allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
 paths: doc/process/state.json
 ---
 
 
-# Phase 4.5: ドキュメント整合性チェックと設計凍結
+# Stage 3/6 consistency: ドキュメント整合性チェックと設計凍結
 
 ## 実行モード
 
-| モード | 用途 | state.json の current_phase |
-|---|---|---|
-| `full` | 通常（Phase 4.5 全体を実行） | `"phase_4"` |
-| `incremental` | 要件追加時の差分チェック | `"phase_4"` + `mode="incremental"` |
-| `mini` | Phase 5 中の Plan Repair 時（差分修正のみ） | `"phase_4_5_mini"` |
+| モード | 用途 | state.json の next_stage | 起動エージェント |
+|---|---|---|---|
+| `full` | 通常（全 STEP を実行） | `"consistency"` | `stage-consistency-agent` |
+| `incremental` | 要件追加時の差分チェック | `"consistency"` + `mode="incremental"` | `stage-consistency-agent` |
+| `mini` | implementation 中の Plan Repair 時（差分修正のみ） | `"plan_repair"` | `stage-plan-repair-agent` |
 
 **`mini` モードの動作:**
-- Phase 4.5a-pre（ID整合性）と Phase 4.5a（整合性チェック）はスキップ
+- STEP 1（ID整合性）・STEP 2（整合性チェック）・STEP 3（カバレッジ行列）はスキップ
 - タスクチェックリストの**未着手グループのみ**を対象に checklist-writer を再実行（完了済みグループは保持）
 - カバレッジ行列・スペックキャッシュは更新しない
-- 完了後、state.json の `current_phase` を `"phase_4_5"` に戻す
+- 完了後、state.json の `next_stage` を `"implementation"` に戻す
 
 ---
 
@@ -40,9 +40,9 @@ paths: doc/process/state.json
 - mode（`"full"` または `"incremental"`）
 - baseline_commit（`incremental` 時のみ有効）
 
-## Phase 4.4: Impact Analysis（incremental mode 時のみ）
+## STEP 0: Impact Analysis（incremental mode 時のみ）
 
-`mode = "incremental"` の場合のみ、Phase 4.5a-pre の前に Impact Analysis を実行します。
+`mode = "incremental"` の場合のみ、STEP 1 の前に Impact Analysis を実行します。
 
 以下のエージェントを起動（同期実行、`run_in_background=false`, `model="sonnet"`）：
 
@@ -78,13 +78,13 @@ baseline_commit: {BASELINE_COMMIT}
 ```
 ```
 
-Impact Analysis 完了後、その結果を Phase 4.5b（checklist-writer）に渡して、影響範囲のタスクのみをチェックリスト化させます。
+Impact Analysis 完了後、その結果を STEP 4（checklist-writer）に渡して、影響範囲のタスクのみをチェックリスト化させます。
 
 ---
 
-## Phase 4.5a-pre: トレーサビリティID整合性チェック
+## STEP 1: トレーサビリティID整合性チェック
 
-整合性チェック（Phase 4.5a）の前に、以下のID参照チェックを実施してください：
+整合性チェック（STEP 2）の前に、以下のID参照チェックを実施してください：
 
 **1. 要件ID一覧の抽出:**
 
@@ -100,21 +100,21 @@ Impact Analysis 完了後、その結果を Phase 4.5b（checklist-writer）に�
 
 **3. 未参照REQ-IDの検出:**
 
-マスターリストのREQ-IDのうち、どのドキュメントの `covers` にも登場しないものを「未カバー要件」として記録します（Phase 4.5 でカバレッジ行列に反映）。
+マスターリストのREQ-IDのうち、どのドキュメントの `covers` にも登場しないものを「未カバー要件」として記録します（STEP 3 でカバレッジ行列に反映）。
 
 **4. エラー処理:**
 
 - 存在しないIDへの参照 → AskUserQuestion で人間に修正を依頼（続行不可）
-- frontmatter が存在しないドキュメント → 警告を記録して Phase 4.5a に進む（ブロックしない）
+- frontmatter が存在しないドキュメント → 警告を記録して STEP 2 に進む（ブロックしない）
 
 ---
 
-## Phase 4.5a: ドキュメント整合性チェック
+## STEP 2: ドキュメント整合性チェック
 
 `mode` によって実行内容が異なります。
 
 - **`mode = "full"`**: ドキュメント間の矛盾・考慮漏れを検出する（従来通り）
-- **`mode = "incremental"`**: `baseline_commit` 以降に変更されたドキュメントと既存コードを比較し、「未実装の差分」を検出する（Phase 4.4 の Impact Analysis 結果を参考にする）
+- **`mode = "incremental"`**: `baseline_commit` 以降に変更されたドキュメントと既存コードを比較し、「未実装の差分」を検出する（STEP 0 の Impact Analysis 結果を参考にする）
 
 以下のエージェントを起動（同期実行、`run_in_background=false`, `model="opus"`）。
 
@@ -124,9 +124,9 @@ Impact Analysis 完了後、その結果を Phase 4.5b（checklist-writer）に�
 
 ---
 
-## Phase 4.5a-post: カバレッジ行列の生成
+## STEP 3: カバレッジ行列の生成
 
-Phase 4.5a（整合性チェック）完了後、以下の手順で `doc/process/coverage_matrix.md` を生成します：
+STEP 2（整合性チェック）完了後、以下の手順で `doc/process/coverage_matrix.md` を生成します：
 
 **フォーマット:**
 
@@ -135,7 +135,7 @@ Phase 4.5a（整合性チェック）完了後、以下の手順で `doc/process
 
 | 要件ID | 要件タイトル | テストID | API/エンドポイント | 実装タスク |
 |---|---|---|---|---|
-| REQ-001 | ユーザー認証 | TC-001, TC-002 | API-001 (POST /auth/login) | （Phase 4.5bのチェックリスト生成後に補完） |
+| REQ-001 | ユーザー認証 | TC-001, TC-002 | API-001 (POST /auth/login) | （STEP 4 のチェックリスト生成後に補完） |
 | REQ-002 | パスワードリセット | TC-003 | API-002 | （同上） |
 | REQ-003 | ログアウト | ❌ 未カバー | ❌ | ❌ |
 ```
@@ -154,12 +154,12 @@ Phase 4.5a（整合性チェック）完了後、以下の手順で `doc/process
 | 選択肢 | 動作 |
 |---|---|
 | 「要件を削除する」 | 要件定義書から該当 REQ-ID を削除し、frontmatter を更新 |
-| 「テスト/APIを追加する」 | Phase 3 に戻ってドキュメントを補完（state.json の current_phase を "phase_2" に戻す） |
+| 「テスト/APIを追加する」 | spec に戻ってドキュメントを補完（state.json の `next_stage` を `"spec"` に戻して終了し、人間に `/dev-flow` の再実行を案内） |
 | 「このまま進める（除外範囲として認識）」 | coverage_matrix.md に `除外` と記録して続行 |
 
 ---
 
-## Phase 4.5b・4.5c: タスクチェックリストとスペックキャッシュの並列生成
+## STEP 4: タスクチェックリストとスペックキャッシュの並列生成
 
 Agent Teams（`TeamCreate` / `team_name`）は使用しません。以下の 2 エージェントを **同一ターンで同時に** 名前付きバックグラウンドサブエージェントとして起動し、それぞれの完了通知（最終回答）を本エージェントが受け取ります。中間オーケストレーター（旧 `consistency-orchestrator`）は置きません。
 
@@ -177,13 +177,13 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。以下の 2 �
 
 ---
 
-## Phase 4.5d: 設計凍結コミット
+## STEP 5: 設計凍結コミット
 
 `checklist-writer` と `spec-cache-writer` の両方の完了通知を受けたら、以下を実行。
 
 通知が届かない場合（エージェントが途中でエラー終了した等）は、以下の手順でリカバリします：
 1. `doc/process/task_checklist.md` と `doc/internal/spec_cache.md` の存在を Bash で確認する
-2. 両ファイルが存在すれば内容を Read して品質を直接確認し、問題なければ Phase 4.5d へ進む
+2. 両ファイルが存在すれば内容を Read して品質を直接確認し、問題なければ設計凍結コミットへ進む
 3. どちらかが存在しなければ、該当する writer を同じ `name` で Agent 再起動して生成し直す
 
 ```bash
@@ -199,5 +199,5 @@ git commit -m "docs: freeze specifications"
 
 設計凍結コミット後、以下を実行：
 
-1. `doc/process/state.json` を更新（current_phase を "phase_4_5" に）
-2. 人間に「Phase 4.5 完了。次は `/dev-flow` を実行して Phase 5 に進んでください」と通知
+1. `doc/process/state.json` を更新（`next_stage` を `"implementation"` に）
+2. 人間に「consistency 完了。次は `/dev-flow` を実行して implementation（並列実装）に進んでください」と通知

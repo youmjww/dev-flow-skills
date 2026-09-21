@@ -1,13 +1,13 @@
 ---
 name: dev-flow-test
-description: AI駆動開発フローのテスト実行フェーズ（Phase 6）。Haiku で最大 2 回試行し、失敗時は自動的に Sonnet（最大 3 回）に昇格してテストを全通過させます。テストコードは修正せず、プロダクションコードのみを修正する DocDD ルールを適用し、E2E テストにも対応します。Phase 5 実装完了後、または `--from=test` 起動時に使用します。
+description: AI駆動開発フローの test ステージ（5/6: テスト実行）。Haiku で最大 2 回試行し、失敗時は自動的に Sonnet（最大 3 回）に昇格してテストを全通過させます。テストコードは修正せず、プロダクションコードのみを修正する DocDD ルールを適用し、E2E テストにも対応します。implementation 完了後、または `--from=test` 起動時に使用します。
 model: haiku
 allowed-tools: Read Write Edit Bash Agent AskUserQuestion
 paths: doc/process/state.json
 ---
 
 
-# Phase 6: テスト実行（ハイブリッドモデル）
+# Stage 5/6 test: テスト実行（ハイブリッドモデル）
 
 ## 入力
 
@@ -15,14 +15,14 @@ paths: doc/process/state.json
 - tech_stack
 - is_e2e
 
-## Phase 6-0. 実行モデル（チーム機能は使わない）
+## STEP 0: 実行モデル（チーム機能は使わない）
 
 Agent Teams（`TeamCreate` / `team_name`）は使用しません。テストランナーは本エージェントが **同期サブエージェント**（`run_in_background=false`）として順に起動し、**最終回答**で結果を受け取ります。ランナーは SendMessage を送りません。中間オーケストレーター（旧 `test-orchestrator`）も置きません。
 
 技術スタック: `{tech_stack}`
 E2E テストあり: `{IS_E2E}`
 
-## Phase 6a: test-runner-haiku を同期起動
+## STEP 1: test-runner-haiku を同期起動
 
 以下の設定で `test-runner-haiku` を起動します（`name="test-runner-haiku"`, `run_in_background=false`, `model="haiku"`）：
 
@@ -64,15 +64,15 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 ---
 
-## Phase 6b: test-runner-haiku の結果判定
+## STEP 2: test-runner-haiku の結果判定
 
 Agent 呼び出しが返ったら最終回答を読み取ります：
 
-- **「全テスト通過（Haiku）」** → Phase 6d（出力）へ進む
-- **「Haiku 試行上限到達」** → Phase 6c（Sonnet 昇格）へ進む
-- どちらでもない（途中終了・エラー）→ テストを一度 Bash で実行して現状を確認し、失敗が残っていれば Phase 6c へ、通過していれば Phase 6d へ
+- **「全テスト通過（Haiku）」** → STEP 4（出力）へ進む
+- **「Haiku 試行上限到達」** → STEP 3（Sonnet 昇格）へ進む
+- どちらでもない（途中終了・エラー）→ テストを一度 Bash で実行して現状を確認し、失敗が残っていれば STEP 3 へ、通過していれば STEP 4 へ
 
-## Phase 6c: Sonnet へ昇格（Haiku が2回失敗した場合のみ実行）
+## STEP 3: Sonnet へ昇格（Haiku が2回失敗した場合のみ実行）
 
 以下の設定で `test-runner-sonnet` を起動します（`name="test-runner-sonnet"`, `run_in_background=false`, `model="sonnet"`）：
 
@@ -138,11 +138,11 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 ---
 
-`test-runner-sonnet` の最終回答がエスカレーション報告だった場合は、`doc/process/escalation_phase_6_{timestamp}.md` に保存したうえで AskUserQuestion で人間に状況を報告して指示を仰ぐ（`~/.claude/skills/dev-flow/reference/escalation-format.md` 参照）。state.json は更新しない。
+`test-runner-sonnet` の最終回答がエスカレーション報告だった場合は、`doc/process/escalation_test_{timestamp}.md` に保存したうえで AskUserQuestion で人間に状況を報告して指示を仰ぐ（`~/.claude/skills/dev-flow/reference/escalation-format.md` 参照）。state.json は更新しない。
 
-## Phase 6d: 出力
+## STEP 4: 出力
 
 全テスト通過を確認したら、以下を実行：
 
-1. `doc/process/state.json` を更新（current_phase を "phase_6" に）
-2. 人間に「Phase 6 完了。次は `/dev-flow` を実行して Phase 7 に進んでください」と通知
+1. `doc/process/state.json` を更新（`next_stage` を `"compliance"` に）
+2. 人間に「test 完了。次は `/dev-flow` を実行して compliance（準拠チェック）に進んでください」と通知

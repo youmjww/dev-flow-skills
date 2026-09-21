@@ -14,7 +14,7 @@ Plan Repair の発動は同一フロー内で最大3回まで。上限到達後�
 
 ## 手順
 
-1. 現在進行中の worktree の作業状況をメモ（`state.json` の `phase_5_progress.plan_repair_memo` に記録）
+1. 現在進行中の worktree の作業状況をメモ（`state.json` の `implementation_progress.plan_repair_memo` に記録）
 2. AskUserQuestion で人間に提示：
 
 ```
@@ -31,15 +31,15 @@ Plan Repair の発動は同一フロー内で最大3回まで。上限到達後�
 
 | 選択肢 | 動作 |
 |---|---|
-| 「計画修正を承認」 | Phase 4.5 を mini モードで再実行（差分修正のみ） |
-| 「却下して当初計画で続行」 | そのまま Phase 5 継続（worktree を再開） |
-| 「全体を Phase 4.5 から再生成」 | task_checklist.md を全体作り直し |
+| 「計画修正を承認」 | consistency を mini モード（`plan_repair`）で再実行（差分修正のみ） |
+| 「却下して当初計画で続行」 | そのまま implementation 継続（worktree を再開） |
+| 「全体を consistency から再生成」 | task_checklist.md を全体作り直し（`next_stage` を `"consistency"` に戻して終了） |
 
 3. 「計画修正を承認」選択時:
-   - `state.json.phase_5_progress.completed_groups` は維持（完了済みグループは再実行しない）
-   - `state.json.current_phase` を一時的に `"phase_4_5_mini"` に設定
-   - Phase 4.5 を mini モードで実行（詳細は `dev-flow-consistency/SKILL.md` 参照）
-   - mini モード完了後、`state.json.current_phase` を `"phase_4_5"` に戻して Phase 5 を未着手グループから再開
+   - `state.json.implementation_progress.completed_groups` は維持（完了済みグループは再実行しない）
+   - `state.json.next_stage` を一時的に `"plan_repair"` に設定して終了
+   - オーケストレーターが `stage-plan-repair-agent` を起動し、consistency を mini モードで実行（詳細は `dev-flow-consistency/SKILL.md` 参照）
+   - mini モード完了後、`state.json.next_stage` が `"implementation"` に戻り、次回起動で implementation を未着手グループから再開
 
 4. 修正履歴を `doc/process/plan_repair_log.md` に記録：
 

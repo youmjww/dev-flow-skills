@@ -1,13 +1,13 @@
 ---
 name: dev-flow-spec
-description: AI駆動開発フローのドキュメント生成フェーズ（Phase 3-4）。テスト定義書（Gherkin）・API仕様書（OpenAPI 3.1.0）・インフラ仕様書・UIモックを名前付きサブエージェントで並列生成し、frontmatter に `covers: [REQ-NNN]` を付与してエージェントレビューと人間レビューを得ます。要件定義承認後の `/dev-flow` 継続時、または `--from=spec` で起動時に使用します。
+description: AI駆動開発フローの spec ステージ（2/6: 仕様書生成）。テスト定義書（Gherkin）・API仕様書（OpenAPI 3.1.0）・インフラ仕様書・UIモックを名前付きサブエージェントで並列生成し、frontmatter に `covers: [REQ-NNN]` を付与してエージェントレビューと人間レビューを得ます。要件定義承認後の `/dev-flow` 継続時、または `--from=spec` で起動時に使用します。
 model: haiku
 allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
 paths: doc/process/state.json
 ---
 
 
-# Phase 3-4: ドキュメント生成とレビュー
+# Stage 2/6 spec: 仕様書生成とレビュー
 
 ## 入力
 
@@ -23,9 +23,9 @@ paths: doc/process/state.json
 - is_infra
 - is_e2e
 
-## Phase 3: ドキュメント生成
+## STEP 1: ドキュメント生成
 
-### 3-0. 実行モデル（チーム機能は使わない）
+### 1-0. 実行モデル（チーム機能は使わない）
 
 Agent Teams（`TeamCreate` / `team_name`）は使用しません。writer・reviewer はすべて **名前付きサブエージェント**として `Agent(name=..., run_in_background=true)` で起動し、完了通知（最終回答）を本エージェントが受け取って次の処理を決めます。
 
@@ -34,7 +34,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。writer・revi
 - 再開できない場合（エージェントが破棄されている等）は同じ `name` で `Agent` を新規起動し、修正依頼をプロンプトに含める
 - 完了待ちは通知が届くまで待つ。`sleep` によるポーリングはしない
 
-### 3a. writer の並列起動
+### 1a. writer の並列起動
 
 以下のうち起動条件を満たすものを **同一ターンで同時に**起動します（`run_in_background=true`, `model="sonnet"`）。プロンプトは各ファイルを Read し、プレースホルダーを実際の値に置換してから Agent に渡してください。
 
@@ -82,7 +82,7 @@ endpoints:
 
 いずれも要件定義書の `requirements[].id`（REQ-NNN）を参照して `covers` フィールドを埋めること。
 
-### 3b. reviewer の起動（writer 完了ごと）
+### 1b. reviewer の起動（writer 完了ごと）
 
 writer の完了通知を受け取るたびに、対応する reviewer を起動します（`run_in_background=true`, `model="sonnet"`）。他の writer の完了は待ちません。
 
@@ -95,7 +95,7 @@ writer の完了通知を受け取るたびに、対応する reviewer を起動
 
 reviewer は最終回答として `{"status":"approved"|"changes_requested","issues":[...]}` の JSON を返します。
 
-### 3c. 修正ループ
+### 1c. 修正ループ
 
 | reviewer の結果 | 動作 |
 |---|---|
@@ -103,20 +103,20 @@ reviewer は最終回答として `{"status":"approved"|"changes_requested","iss
 | `changes_requested` | `issues[]` を `SendMessage(to: "{writer name}")` で writer に渡して修正させ、完了後に同じ reviewer を再起動して再レビュー |
 | JSON がパースできない | 回答本文を人間が読める形で保持し、明確な指摘があれば `changes_requested` として扱う |
 
-1 ドキュメントあたりの修正ループは **最大 3 回**。超過したら残りの指摘を Phase 4 の人間レビューに持ち越します。
+1 ドキュメントあたりの修正ループは **最大 3 回**。超過したら残りの指摘を STEP 2 の人間レビューに持ち越します。
 
-### 3d. 完了判定とリカバリ
+### 1d. 完了判定とリカバリ
 
-起動したすべての reviewer が `approved`（または上限到達）になったら Phase 4 へ進みます。
+起動したすべての reviewer が `approved`（または上限到達）になったら STEP 2 へ進みます。
 
 通知が届かない場合（エージェントが途中でエラー終了した等）は、以下の手順でリカバリします：
 1. 各ドキュメントファイル（TEST_SPEC_PATH / API_SPEC_PATH / INFRA_SPEC_PATH / MOCK_PATH）の存在を Bash で確認する
-2. ファイルが存在すれば内容を Read して品質を直接確認し、問題なければ Phase 4 の人間レビューへ進む
+2. ファイルが存在すれば内容を Read して品質を直接確認し、問題なければ STEP 2 の人間レビューへ進む
 3. ファイルが存在しなければ、該当する writer を同じ `name` で再起動して生成し直す
 
 ---
 
-## Phase 4: 人間レビュー
+## STEP 2: 人間レビュー
 
 AskUserQuestion ツールで以下を同時に提示してレビューを依頼：
 
@@ -146,11 +146,11 @@ Agent ツールで同じ `name` を使って新規起動し、修正依頼プロ
 1. `doc/process/state.json` を更新：
    ```json
    {
-     "current_phase": "phase_4",
+     "next_stage": "consistency",
      "test_spec_path": "確定したパス",
      "api_spec_path": "確定したパス",
      "mock_path": "確定したパス",
      ...
    }
    ```
-2. 人間に「Phase 4 完了。次は `/dev-flow` を実行して Phase 4.5 に進んでください」と通知
+2. 人間に「spec 完了。次は `/dev-flow` を実行して consistency（整合性チェック）に進んでください」と通知

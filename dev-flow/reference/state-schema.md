@@ -6,7 +6,7 @@
 
 ```json
 {
-  "current_phase": "phase_2",
+  "next_stage": "spec",
   "mode": "full",
   "baseline_commit": null,
   "requirements_paths": ["doc/requirements/feature.md"],
@@ -28,7 +28,7 @@
   "is_infra": true,
   "is_e2e": false,
   "from": "requirements",
-  "phase_5_progress": {
+  "implementation_progress": {
     "total_groups": 3,
     "completed_groups": ["group-1"],
     "active_worktrees": [],
@@ -54,8 +54,8 @@
       "dev-flow": "{git rev-parse --short HEAD}"
     },
     "started_at": "{ISO8601}",
-    "phase_history": [
-      { "phase": "phase_2", "model": "claude-opus-4-7", "started_at": "...", "completed_at": "...", "duration_seconds": 320 }
+    "stage_history": [
+      { "stage": "requirements", "model": "claude-opus-4-7", "started_at": "...", "completed_at": "...", "duration_seconds": 320 }
     ]
   }
 }
@@ -65,15 +65,15 @@
 
 | フィールド | 説明 |
 |---|---|
-| `current_phase` | 直前に完了したフェーズ（= 次に実行するフェーズの前段）。`null` または欠損 = Phase 1 から開始。Phase 8 完了時は `"completed"` を書いてから state.json を削除する |
+| `next_stage` | **次に実行する**ステージ名（`spec` / `consistency` / `plan_repair` / `implementation` / `test` / `compliance` / `completed`）。`null` または欠損 = requirements から開始。compliance 完了時は `"completed"` を書いてから state.json を削除する。旧スキーマの `current_phase`（完了フェーズ: `phase_2` 等）は hook が `phase_2→spec, phase_4→consistency, phase_4_5→implementation, phase_4_5_mini→plan_repair, phase_5→test, phase_6→compliance` で読み替える |
 | `mode` | `"full"`（新規）/ `"incremental"`（差分のみ） |
 | `baseline_commit` | `incremental` 時のみ設定。設定主体・更新主体・参照範囲は下記「baseline_commit のライフサイクル」を参照 |
-| `tech_stack` | 言語・フレームワーク等。Phase 3 以降のサブエージェントが参照 |
-| `is_gui/is_api/is_infra/is_e2e` | 対応するフェーズを有効化するフラグ |
-| `phase_5_progress` | Phase 5 実行中のみ存在。完了時に削除 |
-| `phase_5_progress.pr_numbers` | 各グループの PR 番号の**配列**（Infra/App は 2 本、Cross は 4 本）。PR 作成後に phase-impl-agent が書き込む。`completed_groups` に含まれないグループの番号が「マージ待ち」を表す |
+| `tech_stack` | 言語・フレームワーク等。spec 以降のサブエージェントが参照 |
+| `is_gui/is_api/is_infra/is_e2e` | 対応する生成物・テストを有効化するフラグ |
+| `implementation_progress` | implementation 実行中のみ存在。完了時に削除 |
+| `implementation_progress.pr_numbers` | 各グループの PR 番号の**配列**（Infra/App は 2 本、Cross は 4 本）。PR 作成後に stage-implementation-agent が書き込む。`completed_groups` に含まれないグループの番号が「マージ待ち」を表す |
 | `agent_hierarchy` | 階層深さ監視。max_depth=4 を超えたらエスカレーション |
-| `harness` | 再現性メタデータ。Phase 1 開始時に追加、各フェーズ完了時に phase_history を更新 |
+| `harness` | 再現性メタデータ。requirements 開始時に追加、各ステージ完了時に stage_history を更新 |
 
 ## baseline_commit のライフサイクル
 
@@ -82,10 +82,10 @@
 | タイミング | アクター | 動作 |
 |---|---|---|
 | 初期設定 | `dev-flow` オーケストレーター（STEP 1.5） | `incremental` モード確定時に `git rev-parse HEAD` を `baseline_commit` に記録 |
-| Phase 4.4 | `phase-consistency-agent`（Impact Analysis） | `git diff $baseline_commit...HEAD -- doc/` で要件差分を抽出。**書き換えない** |
-| Phase 5 開始時 | `phase-impl-agent` | 実装範囲決定のために参照。**書き換えない** |
-| Phase 5 完了時 | `phase-impl-agent` | 全グループの PR がマージされた後、`git rev-parse HEAD`（=ベースブランチの最新 HEAD）を `baseline_commit` に書き戻して state.json を保存 |
-| Phase 6 / Phase 7-8 | 参照しない | テスト・準拠チェックは `baseline_commit` に依存しない |
+| consistency STEP 0 | `stage-consistency-agent`（Impact Analysis） | `git diff $baseline_commit...HEAD -- doc/` で要件差分を抽出。**書き換えない** |
+| implementation 開始時 | `stage-implementation-agent` | 実装範囲決定のために参照。**書き換えない** |
+| implementation 完了時 | `stage-implementation-agent` | 全グループの PR がマージされた後、`git rev-parse HEAD`（=ベースブランチの最新 HEAD）を `baseline_commit` に書き戻して state.json を保存 |
+| test / compliance | 参照しない | テスト・準拠チェックは `baseline_commit` に依存しない |
 
 `full` モードでは `baseline_commit = null` 固定。すべてのアクターは null を見たら「全範囲対象」と解釈する。
 
@@ -95,7 +95,7 @@
 git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unknown"
 ```
 
-## Phase 5 PR マージ待機ロジック
+## implementation の PR マージ待機ロジック
 
 `completed_groups` への追加タイミングは「グループの全 PR がマージされた後」。**待機はしない**（`sleep` ポーリング禁止）。
 
@@ -103,15 +103,15 @@ git -C ~/.claude/skills/dev-flow rev-parse --short HEAD 2>/dev/null || echo "unk
 |---|---|
 | PR 作成直後 | 各 PR に `gh pr merge <N> --merge` を試行。hook `pr-merge-guard.sh` が条件を検証し、満たさなければ deny |
 | グループの全 PR が MERGED | STEP H を実行して `completed_groups` に追加、依存解決済みの次グループへ |
-| deny された PR が残る | 依存の無い他グループがあれば続行。無ければ PR URL と deny 理由を人間に提示して phase-impl-agent を**終了** |
-| 次回 `/dev-flow` 起動時 | phase-impl-agent の再開処理が `pr_numbers` のうち未完了グループの PR を `gh pr view` で確認。全 MERGED → STEP H。OPEN → 再度 `gh pr merge` を試行 |
-| 新グループ追加 | 非対応。Phase 4.5 からやり直し |
+| deny された PR が残る | 依存の無い他グループがあれば続行。無ければ PR URL と deny 理由を人間に提示して stage-implementation-agent を**終了** |
+| 次回 `/dev-flow` 起動時 | stage-implementation-agent の再開処理が `pr_numbers` のうち未完了グループの PR を `gh pr view` で確認。全 MERGED → STEP H。OPEN → 再度 `gh pr merge` を試行 |
+| 新グループ追加 | 非対応。consistency からやり直し |
 
 マージ待ち PR の一覧は SessionStart hook（`session-start.sh`）がセッション開始時に表示する。
 
 未完了グループの PR 状態確認例：
 ```bash
-jq -r '.phase_5_progress as $p | ($p.pr_numbers // {}) | to_entries[]
+jq -r '.implementation_progress as $p | ($p.pr_numbers // {}) | to_entries[]
   | select(.key as $g | ($p.completed_groups // []) | index($g) | not)
   | "\(.key) \(.value | join(" "))"' doc/process/state.json \
 | while read -r group nums; do

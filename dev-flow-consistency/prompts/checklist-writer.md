@@ -36,14 +36,16 @@ baseline_commit: `{BASELINE_COMMIT}`
 ```markdown
 # タスクチェックリスト
 
-## フェーズ進捗
+## ステージ進捗
 
-- [x] Phase 1-2: 要件定義
-- [x] Phase 3-4: ドキュメント生成
-- [x] Phase 4.5: 整合性チェック・設計凍結
-- [ ] Phase 5: 並列実装（Dev / QA）
-- [ ] Phase 6: テスト実行
-- [ ] Phase 7-8: ドキュメント準拠チェック・完了
+- [x] 1. requirements: 要件定義
+- [x] 2. spec: 仕様書生成
+- [x] 3. consistency: 整合性チェック・設計凍結
+- [ ] 4. implementation: 並列実装（Dev / QA）
+- [ ] 5. test: テスト実行
+- [ ] 6. compliance: ドキュメント準拠チェック・完了
+
+（この 6 行は hook が `state.json.next_stage` に合わせて自動同期する。行頭の `- [ ] N. <stage>:` の形式を変えないこと）
 
 ## 並列実行グループ
 
@@ -53,7 +55,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 
 ## グループ間依存DAG
 
-グループ間の依存関係を以下のフォーマットで必ず明記すること。依存が無いグループは `depends_on: []` とし、Phase 5 で並列実行される。
+グループ間の依存関係を以下のフォーマットで必ず明記すること。依存が無いグループは `depends_on: []` とし、implementation で並列実行される。
 
 ```
 - グループ 1 (Infra) — depends_on: []

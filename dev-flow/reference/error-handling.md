@@ -5,10 +5,10 @@
 **破損している場合:**
 1. `git log --oneline -- doc/process/state.json | head -5` でバックアップ確認
 2. `git show HEAD:doc/process/state.json` で復元試行
-3. 復元不可 → AskUserQuestion で選択：「Phase 1 からやり直す」/「手動で修正する」
+3. 復元不可 → AskUserQuestion で選択：「requirements からやり直す」/「手動で修正する」
 
 **必須フィールド欠損:**
-- `current_phase` 不明 → 人間に確認
+- `next_stage` 不明（旧 `current_phase` も無い） → 人間に確認
 - `mode` 不明 → デフォルト `"full"` を設定
 - `requirements_paths` 空 → `doc/requirements/*.md` を列挙して確認
 
@@ -21,7 +21,7 @@
 
 **サブエージェント途中停止:**
 - エージェントの最終出力を確認
-- 成果物（ドキュメント等）が存在 → Read して品質確認し問題なければ次フェーズへ
+- 成果物（ドキュメント等）が存在 → Read して品質確認し問題なければ次ステージへ
 - 成果物なし → 同設定で再起動（最大2回）
 
 ## チェックリスト関連

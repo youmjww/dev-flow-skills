@@ -85,10 +85,10 @@ Tests: TC-001, TC-002
 
 **4.5. 推論トレースの記録（全タスク完了前）:**
 
-実装中に行った主要な意思決定を `{メインディレクトリ}/doc/process/reasoning/phase5-dev-infra-group-{GROUP_N}.md` に記録してください：
+実装中に行った主要な意思決定を `{メインディレクトリ}/doc/process/reasoning/implementation-dev-infra-group-{GROUP_N}.md` に記録してください：
 
 ```markdown
-# Phase 5 Dev (Infra) グループ {GROUP_N} - 推論トレース
+# implementation Dev (Infra) グループ {GROUP_N} - 推論トレース
 
 ## 主要な意思決定
 
