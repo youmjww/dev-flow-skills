@@ -3,7 +3,7 @@ name: dev-flow-test
 description: AI駆動開発フローの test ステージ（5/6: テスト実行）。Haiku で最大 2 回試行し、失敗時は自動的に Sonnet（最大 3 回）に昇格してテストを全通過させます。テストコードは修正せず、プロダクションコードのみを修正する DocDD ルールを適用し、E2E テストにも対応します。implementation 完了後、または `--from=test` 起動時に使用します。
 model: haiku
 allowed-tools: Read Write Edit Bash Agent AskUserQuestion
-paths: doc/process/state.json
+disable-model-invocation: true
 ---
 
 

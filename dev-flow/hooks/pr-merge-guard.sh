@@ -18,7 +18,20 @@
 source "$(dirname "$0")/lib.sh"
 
 [ "$(jqi '.tool_name')" = "Bash" ] || exit 0
-CMD="$(jqi '.tool_input.command // empty')"
+CMD_RAW="$(jqi '.tool_input.command // empty')"
+# heredoc（<<EOF ... EOF / <<'EOF' / <<-EOF）の本文は「データ」であってコマンドではないので判定から外す。
+# ドキュメントやスクリプトに書かれた "gh pr merge" という文字列で誤検知しないため。
+CMD="$(printf '%s\n' "$CMD_RAW" | awk '
+  term != "" { if ($0 == term || $0 == "\t" term) { term = "" }; next }
+  {
+    line = $0
+    if (match(line, /<<-?[[:space:]]*["'"'"']?[A-Za-z_][A-Za-z0-9_]*["'"'"']?/)) {
+      tag = substr(line, RSTART, RLENGTH)
+      sub(/^<<-?[[:space:]]*/, "", tag); gsub(/["'"'"']/, "", tag)
+      term = tag
+    }
+    print line
+  }')"
 printf '%s' "$CMD" | grep -qE 'gh[[:space:]]+pr[[:space:]]+merge' || exit 0
 
 PATTERNS="$(dirname "$0")/db-destructive-patterns.txt"

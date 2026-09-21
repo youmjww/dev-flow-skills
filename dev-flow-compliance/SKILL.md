@@ -3,7 +3,7 @@ name: dev-flow-compliance
 description: AI駆動開発フローの compliance ステージ（6/6: 準拠チェック・完了報告）。カバレッジ行列で TC-NNN・API-NNN の実装存在を機械的に検証し、実装がドキュメントに完全準拠しているか確認します。乖離は実装ミス/仕様変更に分類して対応し、完了レポートを生成し、`doc/process/state.json` を `completed` にして（削除せず）フローを終了します。test 通過後、または `--from=compliance` 起動時に使用します。
 model: opus
 allowed-tools: Read Write Edit Bash AskUserQuestion
-paths: doc/process/state.json
+disable-model-invocation: true
 ---
 
 

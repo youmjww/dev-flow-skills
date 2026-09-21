@@ -197,7 +197,18 @@ flowchart TD
 
 #### Progressive disclosure
 
-各 SKILL.md は 500 行以下に保ち、長大なリファレンス（Plan Repair 詳細手順・プロンプト注入仕様など）は `reference/*.md` に分離して必要時のみ読み込みます。Claude Skills の公式ベストプラクティスに沿った構成です。
+各 SKILL.md は 500 行以下に保ち、長大なリファレンス（Plan Repair 詳細手順・プロンプト注入仕様・復旧手順など）は `reference/*.md` に分離して必要時のみ読み込みます。
+
+#### Claude Code スキルのベストプラクティスへの準拠
+
+| 項目 | 対応 |
+|---|---|
+| `description` は主要ユースケース + いつ使うか | 全スキル |
+| `disable-model-invocation: true` | 全スキル。コミット・PR・自動マージまで行う副作用の大きいワークフローなので、起動は人間の `/dev-flow` に限定（各ステージの単独実行 `/dev-flow-spec` 等も人間のみ） |
+| `argument-hint` | `/dev-flow` の補完に `[--kind=…] [--from=…] [--bootstrap] [--dry-run] タスク説明` を表示 |
+| 動的コンテキスト注入（```` ```! ````） | `/dev-flow` 起動時に下流スキルの存在・`state.json`・ステージ進捗・実装コードの有無・hooks 登録状況をシェルで評価して埋め込む。Haiku に Bash で確認させる工程を削減 |
+| `paths` は使わない | `state.json` を触るたびにステージスキルが自動ロードされる誤用を除去 |
+| 「効かなければ hooks で決定的に強制」 | `dev-flow/hooks/` |
 
 ---
 
@@ -366,6 +377,7 @@ dev-flow-skills/
 │   ├── SKILL.md                    # 実装オーケストレーター
 │   ├── reference/
 │   │   ├── plan-repair.md          # Plan Repair フロー詳細手順
+│   │   ├── recovery.md             # state.json とリモートの乖離からの復旧
 │   │   └── agent-prompt-injection.md  # memory注入・ガードレール・昇格通知
 │   └── prompts/                    # エージェントプロンプト（チーム別）
 │       ├── dev-infra.md            # Infra Dev（推論トレース・JSON通知）
