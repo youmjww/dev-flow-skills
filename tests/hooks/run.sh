@@ -242,6 +242,69 @@ printf '# エスカレーション報告: test\n' > "$dir/doc/process/escalation
 out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/escalation_test_20260921.md)")"
 assert_eq "escalation 書き込みは exit 0" "$(hook_rc)" "0"
 assert_contains "escalation が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=escalation file=escalation_test_20260921.md"
+
+# state.json の値域
+write_state "$dir" bogus_stage
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
+assert_eq "next_stage の値域外は exit 2" "$(hook_rc)" "2"
+write_state "$dir" spec '.kind = "hotfix"'
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
+assert_eq "kind の値域外は exit 2" "$(hook_rc)" "2"
+write_state "$dir" spec '.kind = "fix"'
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
+assert_eq "正しい next_stage / kind は exit 0" "$(hook_rc)" "0"
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
+# doc-validate.sh / doc-validate.py
+# ---------------------------------------------------------------------------
+section "doc-validate.sh / doc-validate.py"
+SAMPLE="$ROOT/evals/fixtures/sample-project"
+dir="$(new_project)"; cp -R "$SAMPLE/." "$dir/"
+
+out="$(run_hook doc-validate.sh "$dir" "$(write_json src/main.go)")"
+assert_empty "doc/ 以外の書き込みは素通り" "$out"
+
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "正しいテスト定義書は exit 0" "$(hook_rc)" "0"
+assert_contains "検証 OK が additionalContext に出る" "$(reason "$out")" "スキーマ検証 OK"
+
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/process/task_checklist.md)")"
+assert_eq "正しいチェックリストは exit 0" "$(hook_rc)" "0"
+
+# covers に存在しない REQ
+sed -i.bak 's/covers: \[REQ-004\]/covers: [REQ-099]/' "$dir/doc/test-spec/auth.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "存在しない REQ を covers すると exit 2" "$(hook_rc)" "2"
+assert_contains "違反理由が stderr に出る" "$(hook_err)" "REQ-099 が doc/requirements/ に存在しません"
+cp "$SAMPLE/doc/test-spec/auth.md" "$dir/doc/test-spec/auth.md"
+
+# implemented_by の関数が無い
+sed -i.bak 's/TestLogin_WrongPassword$/TestLogin_Missing/' "$dir/doc/test-spec/auth.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "implemented_by の関数が無ければ exit 2" "$(hook_rc)" "2"
+cp "$SAMPLE/doc/test-spec/auth.md" "$dir/doc/test-spec/auth.md"
+
+# frontmatter なし
+printf '# API\n本文のみ\n' > "$dir/doc/api-spec/x.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/api-spec/x.md)")"
+assert_eq "frontmatter 無しは exit 2" "$(hook_rc)" "2"
+assert_contains "doc_invalid が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=doc_invalid file=doc/api-spec/x.md"
+
+# ID 重複（requirements）
+sed -i.bak 's/  - id: REQ-005/  - id: REQ-004/' "$dir/doc/requirements/auth.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/requirements/auth.md)")"
+assert_eq "REQ の重複は exit 2" "$(hook_rc)" "2"
+assert_contains "重複の理由" "$(hook_err)" "REQ-004: ID が重複しています"
+
+# 旧形式のチェックリスト
+printf '# x\n\n## フェーズ進捗\n- [ ] Phase 1-2\n' > "$dir/doc/process/task_checklist.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/process/task_checklist.md)")"
+assert_eq "旧形式のチェックリストは exit 2" "$(hook_rc)" "2"
+
+# --all（eval 用の入口）
+out="$(cd "$SAMPLE" && python3 "$HOOKS/doc-validate.py" --all)"
+assert_contains "--all でサンプルプロジェクトが通る" "$out" "summary: 0 errors"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
