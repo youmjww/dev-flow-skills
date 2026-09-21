@@ -31,6 +31,7 @@ origin: bootstrap — 既存コードから観測した内容。確認のうえ�
 -
 
 ## テスト
+- coverage_threshold: 0.80   # 分岐カバレッジの閾値。既存の CI 設定（codecov.yml / jest.config の coverageThreshold 等）にあればその値
 -
 
 ## リンタ設定から読み取れる方針
