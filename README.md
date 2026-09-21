@@ -62,10 +62,35 @@ flowchart TD
 ### 基本コマンド
 
 ```
-/dev-flow 新機能を実装したい
+/dev-flow 新機能を実装したい                       # kind=feature（既定）
+/dev-flow --kind=change "ログインの有効期限を 30 日に"   # 既存機能の要件変更
+/dev-flow --kind=fix "退会後もログインできてしまう"      # 不具合修正（要件は変えない）
+/dev-flow --kind=refactor "認証ミドルウェアを分割"       # 挙動を変えない内部改善
 ```
 
-各ステージ完了後に `/dev-flow` を実行するだけで次ステージへ進みます。
+### 変更種別（kind）と通るステージ
+
+| kind | requirements | spec | consistency | implementation | test | compliance |
+|---|---|---|---|---|---|---|
+| `feature` | ● | ● 全文生成 | ● | ● | ● | ● 全 ID |
+| `change` | ● 修正モード | ● 差分更新（既存 ID 保持） | ● Impact Analysis | ● 影響グループ | ● | ● 変更 ID |
+| `fix` | — | ● 再現 TC 追加 | ● lite | ● 1 グループ | ● | ● 追加 TC |
+| `refactor` | — | — | ● lite | ● 1 グループ | ● | ● 全 ID（挙動不変） |
+
+`--kind` を省略すると、実装コードがあるプロジェクトでは起動時に選択肢が出ます。
+
+### 既存プロジェクトへの導入（bootstrap）
+
+dev-flow は REQ / TC / API の ID が振られたドキュメントを差分の基点にします。ドキュメントの無い既存コードには、最初に 1 回だけ `bootstrap` を実行して as-is ドキュメントを逆生成します：
+
+```
+/dev-flow --bootstrap                 # リポジトリ全体
+/dev-flow --bootstrap "認証まわりだけ"  # 範囲のヒント（300 ファイル超なら対象ディレクトリを聞かれる）
+```
+
+生成物: コード棚卸し（`doc/process/inventory.md`）、as-is 要件定義書（`doc/requirements/as-is-*.md`、根拠と confidence 付き）、既存テストを対応付けたテスト定義書（`implemented_by` で実テストを指す）、ルートから逆生成した API 仕様書、IaC からのインフラ仕様書、カバレッジ行列（**テストの無い振る舞い**が一覧になる）。完了後は `state.json` が `completed` で残り、以降の `change` / `fix` / `refactor` がそのまま使えます。`--bootstrap` を付けなくても、実装コードがあって `doc/requirements/` が無ければ起動時に提案されます。
+
+各ステージ完了後に `/dev-flow` を実行するだけで次ステージへ進みます。完了後も `doc/process/state.json` は残り（`next_stage: "completed"`）、技術スタックやドキュメントパスを次の変更が引き継ぎます。
 
 ### 特定ステージから開始
 
@@ -99,8 +124,8 @@ flowchart TD
 
 | モード | 用途 | 指定方法 |
 |---|---|---|
-| `full`（デフォルト） | 新規開発（全ステージ実行） | `/dev-flow 新機能を追加` |
-| `incremental` | 要件追加（差分のみ実装） | `/dev-flow` 実行時にモード選択 |
+| `full` | 実装コードが無い新規リポジトリでの `feature` | 自動判定 |
+| `incremental` | 実装コードがあるプロジェクトでのすべての kind | 自動判定 |
 
 `incremental` モードでは consistency の STEP 0（Impact Analysis）で baseline_commit 以降の変更を分析し、影響範囲のタスクのみを実装します。
 
@@ -315,6 +340,9 @@ dev-flow-skills/
 │   ├── SKILL.md                    # 状態管理・ステージ遷移・サブエージェント起動
 │   ├── reference/                  # state.json スキーマ・エスカレーション・エラー対処
 │   └── hooks/                      # 決定的検証（起動前チェック・状態同期・PR マージガード）
+├── dev-flow-bootstrap/             # 0. bootstrap（既存プロジェクト導入・1 回だけ）
+│   ├── SKILL.md
+│   └── prompts/                    # inventory / as-is-requirements / as-is-test-spec / as-is-api-spec / as-is-infra-spec / assign-ids
 ├── dev-flow-requirements/          # 1. requirements
 │   └── SKILL.md                    # 要件定義・曖昧表現リント・用語集生成
 ├── dev-flow-spec/                  # 2. spec
@@ -358,6 +386,7 @@ dev-flow-skills/
 | ステージ | スキル | モデル |
 |---|---|---|
 | オーケストレーター | dev-flow | Haiku 4.5 |
+| bootstrap | dev-flow-bootstrap | Opus 4.7（棚卸し・仕様書逆生成の子: Sonnet） |
 | requirements | dev-flow-requirements | Opus 4.7 |
 | spec | dev-flow-spec | Haiku 4.5（子: Sonnet） |
 | consistency STEP 0 Impact Analysis | dev-flow-consistency | Sonnet |
@@ -432,11 +461,12 @@ implementation は `feature/xxx`（まとめブランチ）上で実行し、各
 
 ## トラブルシューティング
 
-**最初からやり直す**
+**進行中の run を捨てて最初からやり直す**
 
 ```bash
-rm doc/process/state.json
-/dev-flow
+# tech_stack 等は残したまま、run の状態だけ捨てる
+jq '.next_stage = "completed" | del(.implementation_progress)' doc/process/state.json > /tmp/s && mv /tmp/s doc/process/state.json
+/dev-flow --kind=feature "..."
 ```
 
 **特定ステージからやり直す**
