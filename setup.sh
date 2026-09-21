@@ -48,7 +48,7 @@ for dir in "$REPO_DIR"/dev-flow*/; do
   # 旧 setup.sh（ln -sf）が作ってしまった自己参照リンクを掃除
   if [ -L "$dir/$name" ]; then
     rm "$dir/$name"
-    echo "掃除: $dir/$name（旧バージョンの自己参照リンク）"
+    echo "掃除: $dir/${name}（旧バージョンの自己参照リンク）"
   fi
 done
 
@@ -84,7 +84,7 @@ if [ "$INSTALL_HOOKS" = true ]; then
     ' "$SETTINGS" "$HOOKS_JSON" > "$tmp"
     mv "$tmp" "$SETTINGS"
 
-    echo "hooks 登録: $SETTINGS（バックアップ: $backup）"
+    echo "hooks 登録: ${SETTINGS}（バックアップ: ${backup}）"
     echo "  SessionStart / PreToolUse(Agent) / PostToolUse(Write|Edit, Agent) / Stop"
     echo "  Slack 通知を有効にする場合は settings.json の env に DEV_FLOW_SLACK_CHANNEL を設定してください"
   fi
