@@ -8,7 +8,8 @@ implementer（書く側）と reviewer（照合する側）の両方に注入す
 
 | 順 | ソース | 例 |
 |---|---|---|
-| 1 | `conventions/<language>.md` | `language: Go` → `go.md`、`TypeScript` → `typescript.md`、`PHP` → `php.md`、`Python` → `python.md` |
+| 1 | `conventions/testing.md`（**常に**） | 言語横断のテストコード規約。テスト削除・スキップ禁止、異常系必須、分岐ごとの TC、カバレッジゲート |
+| 1' | `conventions/<language>.md` | `language: Go` → `go.md`、`TypeScript` → `typescript.md`、`PHP` → `php.md`、`Python` → `python.md` |
 | 2 | `conventions/<framework>.md`（あれば） | `framework: Next.js` → `nextjs.md`（`react.md` も先に読む）、`Laravel` → `laravel.md`、`React` → `react.md` |
 | 3 | `{project}/doc/conventions.md`（あれば） | プロジェクト固有の規約。言語・フレームワーク規約と矛盾する場合はこちらが優先 |
 | 4 | プロジェクトの `CLAUDE.md` | サブエージェントが自動で読む。規約が書かれていればレビュー基準として扱う |

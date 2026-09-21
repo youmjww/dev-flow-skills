@@ -22,6 +22,8 @@ for f in sorted(glob.glob(os.path.join(root, "*.md"))):
     if not rows:
         errors.append(f"{name}: チェックリストの行（| `prefix/rule` | severity |）が見つかりません")
     prefixes = {r[0] for r in rows}
+    if name == "testing.md" and prefixes != {"test"}:
+        errors.append(f"{name}: ルール ID の prefix は test/ にしてください: {sorted(prefixes)}")
     if len(prefixes) > 1:
         errors.append(f"{name}: ルール ID の prefix が混在しています: {sorted(prefixes)}")
     for pfx, rule, sev in rows:

@@ -425,6 +425,46 @@ assert_eq "state.json の base_branch と不一致は deny" "$(decision "$out")"
 
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 999 --merge')")"
 assert_eq "存在しない PR は deny" "$(decision "$out")" "deny"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 109 --merge')")"
+assert_eq "テスト関数の削除は deny" "$(decision "$out")" "deny"
+assert_contains "削除された関数名を提示" "$(reason "$out")" "TestLogin_WrongPassword"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 110 --merge')")"
+assert_eq "t.Skip の追加は deny" "$(decision "$out")" "deny"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 111 --merge')")"
+assert_eq "テスト関数の移動（削除+同内容の追加）は allow" "$(decision "$out")" "allow"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 112 --merge')")"
+assert_eq "pytest.mark.skip / it.skip は deny" "$(decision "$out")" "deny"
+assert_contains "複数言語のヒットを提示" "$(reason "$out")" "it.skip"
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
+# test-stage-guard.sh
+# ---------------------------------------------------------------------------
+section "test-stage-guard.sh"
+dir="$(new_project)"
+tsw() { jq -n --arg f "$1" --arg t "${2:-Edit}" '{tool_name:$t,tool_input:{file_path:$f}}'; }
+
+write_state "$dir" implementation
+out="$(run_hook test-stage-guard.sh "$dir" "$(tsw pkg/auth/login_test.go)")"
+assert_empty "implementation ステージではテストファイルを編集できる" "$out"
+
+write_state "$dir" test
+out="$(run_hook test-stage-guard.sh "$dir" "$(tsw pkg/auth/login.go)")"
+assert_empty "test ステージでもプロダクションコードは編集できる" "$out"
+
+for f in pkg/auth/login_test.go tests/test_login.py src/login.test.ts tests/Feature/LoginTest.php doc/test-spec/auth.md __tests__/x.spec.tsx; do
+  out="$(run_hook test-stage-guard.sh "$dir" "$(tsw "$f")")"
+  assert_eq "test ステージでは $f を deny" "$(decision "$out")" "deny"
+done
+out="$(run_hook test-stage-guard.sh "$dir" "$(tsw "$dir/pkg/auth/login_test.go" Write)")"
+assert_eq "絶対パスの Write も deny" "$(decision "$out")" "deny"
+assert_contains "deny が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=test_stage_write_denied file=pkg/auth/login_test.go"
+out="$(run_hook test-stage-guard.sh "$dir" "$(bash_json 'rm pkg/auth/login_test.go')")"
+assert_empty "Bash は対象外（pr-merge-guard が diff で拾う）" "$out"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------

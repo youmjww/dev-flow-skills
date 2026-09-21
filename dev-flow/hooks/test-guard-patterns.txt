@@ -1,0 +1,27 @@
+# テストの削除・スキップ・無効化の検出パターン
+# [removed] は PR diff の削除行（^-）に、[added] は追加行（^+）に grep -E で適用する（大文字小文字は区別）。
+# 一致したら自動マージしない（人間レビュー必須）。誤検知は「自動マージしない」側に倒れるだけなので広めに拾う。
+
+# --- テスト関数・ケースの削除 ---
+[removed] ^-\s*func\s+Test[A-Za-z0-9_]*\s*\(
+[removed] ^-\s*(async\s+)?def\s+test_[A-Za-z0-9_]*\s*\(
+[removed] ^-\s*(it|test|describe)(\.each)?\s*\(
+[removed] ^-\s*public\s+function\s+test[A-Za-z0-9_]*\s*\(
+[removed] ^-\s*#\[Test\]
+[removed] ^-\s*/\*\*\s*@test
+
+# --- スキップ・無効化の追加 ---
+[added] ^\+.*\bt\.Skip(f|Now)?\s*\(
+[added] ^\+.*\b(it|test|describe)\.(skip|todo)\s*\(
+[added] ^\+.*\b(xit|xtest|xdescribe)\s*\(
+[added] ^\+.*@pytest\.mark\.(skip|skipif|xfail)
+[added] ^\+.*\bpytest\.skip\s*\(
+[added] ^\+.*\bunittest\.skip
+[added] ^\+.*->markTestSkipped\s*\(
+[added] ^\+.*->markTestIncomplete\s*\(
+[added] ^\+.*#\[(Skip|Incomplete)\]
+[added] ^\+.*\bexpect\.assertions\s*\(\s*0\s*\)
+
+# --- テストの本体を空にする・常に通す ---
+[added] ^\+\s*return\s*;?\s*//\s*(TODO|FIXME|skip|disable)
+[added] ^\+.*\bt\.Log\s*\(\s*"(skip|disabled)

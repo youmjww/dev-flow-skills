@@ -34,6 +34,17 @@
             "statusMessage": "dev-flow 自動マージ条件検証"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/test-stage-guard.sh",
+            "timeout": 10,
+            "statusMessage": "dev-flow テスト改変ガード"
+          }
+        ]
       }
     ],
     "PostToolUse": [

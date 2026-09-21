@@ -10,6 +10,7 @@
 #     - mergeable == MERGEABLE（コンフリクトなし）
 #     - CI チェックがすべて成功（チェックが 1 つも無ければ拒否）
 #     - diff に DB の破壊的変更が含まれない（db-destructive-patterns.txt）
+#     - diff にテストの削除・スキップ・無効化が含まれない（test-guard-patterns.txt）
 #     - マージ方式は --merge のみ（--squash / --rebase / --auto / --admin は拒否）
 #     - 1 コマンドにつき 1 PR、番号または URL で明示
 #
@@ -35,6 +36,7 @@ CMD="$(printf '%s\n' "$CMD_RAW" | awk '
 printf '%s' "$CMD" | grep -qE 'gh[[:space:]]+pr[[:space:]]+merge' || exit 0
 
 PATTERNS="$(dirname "$0")/db-destructive-patterns.txt"
+TEST_PATTERNS="$(dirname "$0")/test-guard-patterns.txt"
 BASE_PATTERN="${DEV_FLOW_AUTO_MERGE_BASE_PATTERN:-^feature/}"
 PROTECTED='^(main|master|develop|release/.*|hotfix/.*)$'
 
@@ -131,5 +133,36 @@ if [ -n "$HITS" ] || [ -n "$TF_DEL" ]; then
 $(printf '%s\n%s' "$HITS" "$TF_DEL" | sed '/^$/d' | sed 's/^/  /')"
 fi
 
+# ---- テストの削除・スキップ ----
+# テストファイルに限らず全 diff を見る（テストヘルパーやテーブルの行削除も拾いたい）。
+# 削除行の検出は「同じ名前が追加行に存在しない」ものだけ（リネーム・移動は許容）。
+REMOVED="$(printf '%s\n' "$DIFF" | grep -E '^-[^-]' || true)"
+TEST_HITS=""
+while IFS= read -r line; do
+  case "$line" in ''|'#'*) continue ;; esac
+  kind="${line%%]*}"; kind="${kind#[}"
+  pat="${line#*] }"
+  if [ "$kind" = "removed" ]; then
+    while IFS= read -r hit; do
+      [ -n "$hit" ] || continue
+      # 削除行と同じ内容（先頭の - を + に変えたもの）が追加行にあれば移動とみなす
+      body="${hit#-}"
+      if ! printf '%s\n' "$ADDED" | grep -qxF -- "+$body"; then
+        TEST_HITS="${TEST_HITS}${hit}
+"
+      fi
+    done <<< "$(printf '%s\n' "$REMOVED" | grep -E -- "$pat" || true)"
+  else
+    h="$(printf '%s\n' "$ADDED" | grep -E -- "$pat" || true)"
+    [ -n "$h" ] && TEST_HITS="${TEST_HITS}${h}
+"
+  fi
+done < "$TEST_PATTERNS"
+TEST_HITS="$(printf '%s' "$TEST_HITS" | sed '/^$/d' | head -8)"
+if [ -n "$TEST_HITS" ]; then
+  deny "dev-flow hook: PR #${PR} にテストの削除・スキップ・無効化が含まれています。テストが通らない場合はプロダクションコードを直すのが原則です（DocDD）。意図的なら人間がレビューしてマージしてください。${URL}
+$(printf '%s\n' "$TEST_HITS" | sed 's/^/  /')"
+fi
+
 log_flow "event=auto_merge_allowed pr=$PR base=$BASE head=$HEAD_REF"
-allow "dev-flow hook: PR #${PR}（$HEAD_REF → ${BASE}）は自動マージ条件（CI 全通過・コンフリクトなし・DB 破壊的変更なし・--merge）を満たしています。"
+allow "dev-flow hook: PR #${PR}（$HEAD_REF → ${BASE}）は自動マージ条件（CI 全通過・コンフリクトなし・DB 破壊的変更なし・テスト削除/スキップなし・--merge）を満たしています。"

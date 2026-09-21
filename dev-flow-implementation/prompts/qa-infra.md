@@ -31,6 +31,10 @@ baseline_commit: `{BASELINE_COMMIT}`
 - 既存テストがある → 重複するテストは追加しない。テストが不足している箇所のみ追記する
 - 既存テストがない → 新規テストファイルを作成する
 
+**厳守（hook と reviewer が機械的に見る）:**
+- 既存テストを削除・スキップ・コメントアウトしない。通らないテストは Dev の修正対象であり、QA が期待値を変えて通してはいけない。テスト定義書が誤っていると考えるなら `blocked` で報告する
+- 変更した関数・エンドポイントごとに異常系を最低 1 つ、`if` / `switch` / 早期 return / `catch` の分岐ごとに 1 ケース。テスト定義書に無い分岐は TC を**追加**（`status: added`）してから実装する
+
 **1. タスクを1件選んでテストコードを生成する**
 - テスト定義書の該当ケースを `{TECH_STACK.test_framework}` で実装する
 - テスト名は日本語で記述（「正常系: 〜」「異常系: 〜」形式）
@@ -46,6 +50,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する。空なら下の標準コマンドを使う：
 {STANDARD_COMMANDS}
 - 最後に実行したコマンドと終了コードを完了 JSON の `result.lint` に必ず書く（0 以外だとレビューに進めない）
+- カバレッジを規約の「標準コマンド（分岐カバレッジ）」で計測し、`result.coverage` に書く。**変更した関数**のうち閾値（`doc/conventions.md` の `coverage_threshold`、既定 0.80）未満のものを `changed_functions_below_threshold` に列挙する（空でないとレビューに進めない）
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
 - コミットメッセージ例: `test: {テスト名} を実装`
@@ -62,7 +67,8 @@ baseline_commit: `{BASELINE_COMMIT}`
   "result": {
     "changed_files": {変更ファイル数},
     "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
-    "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0}
+    "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0},
+    "coverage": {"kind": "branch", "value": 0.87, "changed_functions_below_threshold": []}
   },
   "confidence": 0.85,
   "uncertainty_points": [],
