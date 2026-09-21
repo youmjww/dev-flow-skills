@@ -8,6 +8,8 @@ set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILLS_DIR="$HOME/.claude/skills"
+# 旧版の退避先。~/.claude/skills/ 配下に置くと Claude Code がスキルとして読み込んでしまうので外に出す
+BACKUP_DIR="$HOME/.claude/skills-backup/$(date +%Y%m%d%H%M%S)"
 SETTINGS="$HOME/.claude/settings.json"
 HOOKS_JSON="$REPO_DIR/dev-flow/hooks/hooks.json"
 
@@ -37,8 +39,15 @@ for dir in "$REPO_DIR"/dev-flow*/; do
   target="$SKILLS_DIR/$name"
 
   if [ -e "$target" ] && [ ! -L "$target" ]; then
-    echo "バックアップ: $target -> $target.bak"
-    mv "$target" "$target.bak"
+    mkdir -p "$BACKUP_DIR"
+    echo "バックアップ: $target -> $BACKUP_DIR/$name"
+    mv "$target" "$BACKUP_DIR/$name"
+  fi
+  # 旧 setup.sh が skills/ 配下に作った *.bak はスキルとして誤認識されるので同じ退避先へ移す
+  if [ -d "$target.bak" ]; then
+    mkdir -p "$BACKUP_DIR"
+    echo "移動: $target.bak -> $BACKUP_DIR/$name"
+    mv "$target.bak" "$BACKUP_DIR/$name"
   fi
 
   # -n: target が既にディレクトリへのリンクでも、その中に新しいリンクを作らず置き換える
@@ -48,7 +57,7 @@ for dir in "$REPO_DIR"/dev-flow*/; do
   # 旧 setup.sh（ln -sf）が作ってしまった自己参照リンクを掃除
   if [ -L "$dir/$name" ]; then
     rm "$dir/$name"
-    echo "掃除: $dir/$name（旧バージョンの自己参照リンク）"
+    echo "掃除: $dir/${name}（旧バージョンの自己参照リンク）"
   fi
 done
 
@@ -84,7 +93,7 @@ if [ "$INSTALL_HOOKS" = true ]; then
     ' "$SETTINGS" "$HOOKS_JSON" > "$tmp"
     mv "$tmp" "$SETTINGS"
 
-    echo "hooks 登録: $SETTINGS（バックアップ: $backup）"
+    echo "hooks 登録: ${SETTINGS}（バックアップ: ${backup}）"
     echo "  SessionStart / PreToolUse(Agent) / PostToolUse(Write|Edit, Agent) / Stop"
     echo "  Slack 通知を有効にする場合は settings.json の env に DEV_FLOW_SLACK_CHANNEL を設定してください"
   fi

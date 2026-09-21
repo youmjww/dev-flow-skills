@@ -134,9 +134,9 @@ sub_fail=$?; FAIL=$((FAIL + sub_fail)); PASS=$((PASS + 7 - sub_fail))
 # ---------------------------------------------------------------------------
 section "静的チェック"
 # bash 3.2 は `$VAR（` のように変数名の直後にマルチバイト文字が続くと変数名を誤認して unbound variable になる
-bad="$(grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]' "$HOOKS"/*.sh 2>/dev/null || true)"
+bad="$(grep -nP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]' "$HOOKS"/*.sh "$ROOT/setup.sh" 2>/dev/null || true)"
 assert_empty "変数直後にマルチバイト文字が続く箇所が無い（\${VAR} を使う）" "$bad"
-for f in "$HOOKS"/*.sh; do bash -n "$f" 2>/dev/null || fail "構文: $f"; done
+for f in "$HOOKS"/*.sh "$ROOT/setup.sh"; do bash -n "$f" 2>/dev/null || fail "構文: $f"; done
 ok "全 hook が bash -n を通る"
 
 # ---------------------------------------------------------------------------
