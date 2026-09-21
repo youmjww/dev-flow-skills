@@ -62,6 +62,12 @@
             "command": "$HOME/.claude/skills/dev-flow/hooks/doc-validate.sh",
             "timeout": 30,
             "statusMessage": "dev-flow 成果物検証"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/test-lint.sh",
+            "timeout": 30,
+            "statusMessage": "dev-flow テストコード検証"
           }
         ]
       },

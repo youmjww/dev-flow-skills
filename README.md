@@ -451,6 +451,7 @@ dev-flow-skills/
 |---|---|
 | `stage-*-agent` 起動前 | プランモードでないこと・下流スキルの存在・`state.json` の妥当性・階層深さ・ステージとエージェントの対応・同一ステージの再実行回数を検証。違反時は起動を止める |
 | `state.json` 書き込み後 | JSON 検証・`next_stage` / `kind` の値域検証（違反は差し戻し）、`task_checklist.md` のステージ進捗を同期、`flow.log` に遷移を記録 |
+| テストコード書き込み後 | 静的検証（`test-lint.py`）。skip・assert なし・空テスト・エラー握りつぶしは差し戻し、sleep / 現在時刻 / 乱数 / tautology は警告 |
 | `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | frontmatter のスキーマ検証（ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出し・`status` 値域）。違反は差し戻し |
 | `escalation_*.md` 生成後 | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` を設定していれば Slack に通知（未設定なら通信なし） |
 | `stage-*-agent` 完了後 | 所要時間を `flow.log` に記録。requirements 完了時は人間確認ゲートを念押し |

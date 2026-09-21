@@ -123,6 +123,26 @@ skill_file_for_agent() {
 }
 
 # ---------------------------------------------------------------------------
+# テストファイル判定（test-stage-guard / test-lint で共有）
+# ---------------------------------------------------------------------------
+
+# 引数のパス（相対でも絶対でも可）がテストコードまたはテスト定義書なら 0
+is_test_file() {
+  case "$1" in
+    */doc/test-spec/*|doc/test-spec/*) return 0 ;;
+    *_test.go|*_test.py|*/test_*.py|test_*.py|*.test.ts|*.test.tsx|*.test.js|*.test.jsx|*.spec.ts|*.spec.tsx|*.spec.js|*.spec.jsx|*Test.php|*_spec.rb) return 0 ;;
+    */tests/*|tests/*|*/test/*|test/*|*/__tests__/*|__tests__/*|*/spec/*|spec/*|*/e2e/*|e2e/*) return 0 ;;
+  esac
+  return 1
+}
+
+# テストコード（テスト定義書は除く）なら 0
+is_test_code() {
+  case "$1" in */doc/test-spec/*|doc/test-spec/*) return 1 ;; esac
+  is_test_file "$1"
+}
+
+# ---------------------------------------------------------------------------
 # task_checklist.md 同期
 # ---------------------------------------------------------------------------
 
