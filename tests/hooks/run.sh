@@ -46,26 +46,26 @@ new_project() {
   printf '%s\n' "$dir"
 }
 
-# write_state <dir> <current_phase | null> [extra jq filter]
+# write_state <dir> <next_stage | null> [extra jq filter]
 write_state() {
-  local dir="$1" phase="$2" extra="${3:-.}"
-  jq -n --arg p "$phase" '
-    {current_phase: (if $p == "null" then null else $p end), mode: "full",
+  local dir="$1" stage="$2" extra="${3:-.}"
+  jq -n --arg s "$stage" '
+    {next_stage: (if $s == "null" then null else $s end), mode: "full",
      agent_hierarchy: {max_depth: 4, current_depth: 1},
-     harness: {phase_history: []}}' | jq "$extra" > "$dir/doc/process/state.json"
+     harness: {stage_history: []}}' | jq "$extra" > "$dir/doc/process/state.json"
 }
 
 write_checklist() {
   cat > "$1/doc/process/task_checklist.md" <<'EOF'
 # タスクチェックリスト
 
-## フェーズ進捗
-- [ ] Phase 1-2: 要件定義
-- [ ] Phase 3-4: ドキュメント生成
-- [ ] Phase 4.5: 整合性チェック
-- [ ] Phase 5: 並列実装
-- [ ] Phase 6: テスト実行
-- [ ] Phase 7-8: 準拠チェック
+## ステージ進捗
+- [ ] 1. requirements: 要件定義
+- [ ] 2. spec: 仕様書生成
+- [ ] 3. consistency: 整合性チェック
+- [ ] 4. implementation: 並列実装
+- [ ] 5. test: テスト実行
+- [ ] 6. compliance: 準拠チェック
 
 ## グループ 1 (App)
 - [ ] TASK-001
@@ -111,13 +111,14 @@ section "lib.sh ヘルパー"
   e="$(iso_to_epoch '2026-09-03T19:43:00+0900')"
   assert_eq "iso_to_epoch が固定文字列を epoch に変換する" "$e" "1788432180"
   assert_empty "iso_to_epoch は不正文字列で空を返す" "$(iso_to_epoch 'not-a-date')"
-  assert_eq "phase_rank(phase_4_5)" "$(phase_rank phase_4_5)" "3"
-  assert_eq "expected_agent_for_phase(phase_5)" "$(expected_agent_for_phase phase_5)" "phase-test-agent"
-  assert_eq "next_phase_label(completed)" "$(next_phase_label completed)" "完了"
+  assert_eq "stage_rank(implementation)" "$(stage_rank implementation)" "3"
+  assert_eq "expected_agent_for_stage(test)" "$(expected_agent_for_stage test)" "stage-test-agent"
+  assert_eq "stage_label(completed)" "$(stage_label completed)" "完了"
+  assert_eq "legacy_stage(phase_4_5_mini) は旧値を読み替える" "$(legacy_stage phase_4_5_mini)" "plan_repair"
   rm -f "$f"
   exit $FAIL
 )
-sub_fail=$?; FAIL=$((FAIL + sub_fail)); PASS=$((PASS + 6 - sub_fail))
+sub_fail=$?; FAIL=$((FAIL + sub_fail)); PASS=$((PASS + 7 - sub_fail))
 
 # ---------------------------------------------------------------------------
 # pre-agent-check.sh
@@ -126,44 +127,50 @@ section "pre-agent-check.sh"
 dir="$(new_project)"
 
 out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json some-other-agent)")"
-assert_empty "phase-*-agent 以外は素通り" "$out"
+assert_empty "stage-*-agent 以外は素通り" "$out"
 
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-requirements-agent opus)")"
-assert_empty "Phase 1-2 は state.json 無しでも許可" "$out"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-requirements-agent opus)")"
+assert_empty "requirements は state.json 無しでも許可" "$out"
 
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
-assert_eq "state.json 無しで phase-spec-agent は deny" "$(decision "$out")" "deny"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
+assert_eq "state.json 無しで stage-spec-agent は deny" "$(decision "$out")" "deny"
 
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-requirements-agent opus plan)")"
-assert_eq "プランモードでは Phase 1-2 でも deny" "$(decision "$out")" "deny"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-requirements-agent opus plan)")"
+assert_eq "プランモードでは requirements でも deny" "$(decision "$out")" "deny"
 assert_contains "プランモード deny の理由" "$(reason "$out")" "プランモード"
 
 out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json some-other-agent haiku plan)")"
-assert_empty "プランモードでも phase-*-agent 以外は素通り" "$out"
+assert_empty "プランモードでも stage-*-agent 以外は素通り" "$out"
 
 printf '{broken' > "$dir/doc/process/state.json"
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
 assert_eq "state.json 不正 JSON は deny" "$(decision "$out")" "deny"
 
-write_state "$dir" phase_2
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
-assert_empty "phase_2 + phase-spec-agent は許可（出力なし）" "$out"
-assert_contains "agent_start が flow.log に記録される" "$(cat "$dir/doc/process/flow.log")" "event=agent_start agent=phase-spec-agent phase=phase_2"
+write_state "$dir" spec
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
+assert_empty "next_stage=spec + stage-spec-agent は許可（出力なし）" "$out"
+assert_contains "agent_start が flow.log に記録される" "$(cat "$dir/doc/process/flow.log")" "event=agent_start agent=stage-spec-agent stage=spec"
 
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-test-agent)")"
-assert_eq "フェーズとエージェントの不一致は ask" "$(decision "$out")" "ask"
-assert_contains "不一致理由に期待エージェント名" "$(reason "$out")" "phase-spec-agent"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-test-agent)")"
+assert_eq "ステージとエージェントの不一致は ask" "$(decision "$out")" "ask"
+assert_contains "不一致理由に期待エージェント名" "$(reason "$out")" "stage-spec-agent"
 
-write_state "$dir" phase_2 '.agent_hierarchy.current_depth = 4'
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
+write_state "$dir" spec '.agent_hierarchy.current_depth = 4'
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
 assert_eq "階層深さ上限で ask" "$(decision "$out")" "ask"
 
-write_state "$dir" phase_2 '.harness.phase_history = [range(5) | {phase:"phase_2"}]'
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
-assert_eq "同一フェーズ 5 回で ask（ループ検出）" "$(decision "$out")" "ask"
+write_state "$dir" spec '.harness.stage_history = [range(5) | {stage:"spec"}]'
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
+assert_eq "同一ステージ 5 回で ask（ループ検出）" "$(decision "$out")" "ask"
+
+printf '{"current_phase":"phase_2","mode":"full"}' > "$dir/doc/process/state.json"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
+assert_empty "旧スキーマ current_phase=phase_2 は next_stage=spec として許可" "$out"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-test-agent)")"
+assert_eq "旧スキーマでも不一致は ask" "$(decision "$out")" "ask"
 
 HOME_BAK="$HOME"; export HOME="$(mktemp -d)"
-out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json phase-spec-agent)")"
+out="$(run_hook pre-agent-check.sh "$dir" "$(agent_json stage-spec-agent)")"
 assert_eq "下流スキル欠損は deny" "$(decision "$out")" "deny"
 export HOME="$HOME_BAK"
 rm -rf "$dir"
@@ -182,30 +189,30 @@ out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
 assert_eq "state.json が不正 JSON なら exit 2" "$(hook_rc)" "2"
 assert_contains "exit 2 の理由が stderr に出る" "$(hook_err)" "不正な JSON"
 
-write_state "$dir" phase_4_5
+write_state "$dir" implementation
 write_checklist "$dir"
 out="$(run_hook state-sync.sh "$dir" "$(write_json "$dir/doc/process/state.json")")"
 assert_eq "正常な state.json は exit 0" "$(hook_rc)" "0"
-assert_contains "additionalContext に次フェーズ" "$(reason "$out")" "Phase 5: 並列実装"
+assert_contains "additionalContext に次ステージ" "$(reason "$out")" "Stage 4/6 implementation: 並列実装"
 cl="$(cat "$dir/doc/process/task_checklist.md")"
-assert_contains "Phase 1-2 が [x] に同期" "$cl" "- [x] Phase 1-2"
-assert_contains "Phase 4.5 が [x] に同期" "$cl" "- [x] Phase 4.5"
-assert_contains "Phase 5 は [ ] のまま" "$cl" "- [ ] Phase 5"
-assert_contains "フェーズ進捗以外のチェックボックスは触らない" "$cl" "- [ ] TASK-001"
-assert_contains "phase_transition が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=phase_transition phase=phase_4_5"
+assert_contains "requirements が [x] に同期" "$cl" "- [x] 1. requirements"
+assert_contains "consistency が [x] に同期" "$cl" "- [x] 3. consistency"
+assert_contains "implementation は [ ] のまま" "$cl" "- [ ] 4. implementation"
+assert_contains "ステージ進捗以外のチェックボックスは触らない" "$cl" "- [ ] TASK-001"
+assert_contains "stage_transition が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=stage_transition stage=implementation"
 
 # 巻き戻し（--from=spec 相当）
-write_state "$dir" phase_2
+write_state "$dir" spec
 out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
 cl="$(cat "$dir/doc/process/task_checklist.md")"
-assert_contains "巻き戻しで Phase 3-4 が [ ] に戻る" "$cl" "- [ ] Phase 3-4"
-assert_contains "巻き戻しでも Phase 1-2 は [x]" "$cl" "- [x] Phase 1-2"
+assert_contains "巻き戻しで spec が [ ] に戻る" "$cl" "- [ ] 2. spec"
+assert_contains "巻き戻しでも requirements は [x]" "$cl" "- [x] 1. requirements"
 
 # escalation
-printf '# エスカレーション報告: Phase 6\n' > "$dir/doc/process/escalation_phase_6_20260921.md"
-out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/escalation_phase_6_20260921.md)")"
+printf '# エスカレーション報告: test\n' > "$dir/doc/process/escalation_test_20260921.md"
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/escalation_test_20260921.md)")"
 assert_eq "escalation 書き込みは exit 0" "$(hook_rc)" "0"
-assert_contains "escalation が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=escalation file=escalation_phase_6_20260921.md"
+assert_contains "escalation が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=escalation file=escalation_test_20260921.md"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
@@ -213,10 +220,10 @@ rm -rf "$dir"
 # ---------------------------------------------------------------------------
 section "agent-complete.sh"
 dir="$(new_project)"
-write_state "$dir" phase_2
+write_state "$dir" spec
 
 out="$(run_hook agent-complete.sh "$dir" "$(agent_json some-other-agent)")"
-assert_empty "phase-*-agent 以外は素通り" "$out"
+assert_empty "stage-*-agent 以外は素通り" "$out"
 
 # agent_start を 90 秒前に偽装（log_flow と同じ書式）
 ts="$(TZ=Asia/Tokyo date '+%Y-%m-%dT%H:%M:%S%z')"
@@ -225,13 +232,13 @@ ts="$(TZ=Asia/Tokyo date '+%Y-%m-%dT%H:%M:%S%z')"
   past="$(( $(iso_to_epoch "$ts") - 90 ))"
   # epoch → ISO（GNU / BSD）
   iso="$(TZ=Asia/Tokyo date -d "@$past" '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || TZ=Asia/Tokyo date -j -r "$past" '+%Y-%m-%dT%H:%M:%S%z')"
-  printf '%s event=agent_start agent=phase-requirements-agent phase=null model=opus\n' "$iso" > "$dir/doc/process/flow.log"
+  printf '%s event=agent_start agent=stage-requirements-agent stage=requirements model=opus\n' "$iso" > "$dir/doc/process/flow.log"
 )
-out="$(run_hook agent-complete.sh "$dir" "$(agent_json phase-requirements-agent opus)")"
-assert_contains "完了が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=agent_complete agent=phase-requirements-agent"
+out="$(run_hook agent-complete.sh "$dir" "$(agent_json stage-requirements-agent opus)")"
+assert_contains "完了が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=agent_complete agent=stage-requirements-agent"
 dur="$(grep -o 'duration_seconds=[0-9]*' "$dir/doc/process/flow.log" | cut -d= -f2)"
 [ -n "$dur" ] && [ "$dur" -ge 89 ] && [ "$dur" -le 95 ] && ok "所要時間が算出される（GNU/BSD date）" || fail "所要時間" "got: ${dur:-empty}"
-assert_contains "phase_2 完了時は人間確認ゲートを念押し" "$(reason "$out")" "人間確認ゲート"
+assert_contains "requirements 完了時は人間確認ゲートを念押し" "$(reason "$out")" "人間確認ゲート"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
@@ -243,17 +250,17 @@ dir="$(new_project)"
 out="$(run_hook session-start.sh "$dir" '{}')"
 assert_empty "state.json 無しは何も出さない" "$out"
 
-write_state "$dir" phase_4_5 '.phase_5_progress = {completed_groups:["group-1"], pr_numbers:{"group-1":[101],"group-2":[102]}, base_branch:"feature/xxx"}'
+write_state "$dir" implementation '.implementation_progress = {completed_groups:["group-1"], pr_numbers:{"group-1":[101],"group-2":[102]}, base_branch:"feature/xxx"}'
 out="$(run_hook session-start.sh "$dir" '{}')"
-assert_contains "現在フェーズを表示" "$out" "current_phase=phase_4_5"
+assert_contains "次ステージを表示" "$out" "next_stage=implementation"
 assert_contains "マージ待ち PR を表示（完了グループは除外）" "$out" "group-2: PR #102"
 assert_not_contains "完了グループの PR は表示しない" "$out" "group-1: PR #101"
 
 out="$(run_hook stop-summary.sh "$dir" '{}')"
 assert_empty "flow.log が無ければ stop-summary は沈黙" "$out"
-printf '%s event=phase_transition phase=phase_4_5\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" > "$dir/doc/process/flow.log"
+printf '%s event=stage_transition stage=implementation\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" > "$dir/doc/process/flow.log"
 out="$(run_hook stop-summary.sh "$dir" '{}')"
-assert_contains "直近イベントがあれば systemMessage を出す（file_mtime）" "$(printf '%s' "$out" | jq -r '.systemMessage')" "Phase 5: 並列実装"
+assert_contains "直近イベントがあれば systemMessage を出す（file_mtime）" "$(printf '%s' "$out" | jq -r '.systemMessage')" "Stage 4/6 implementation: 並列実装"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
@@ -261,7 +268,7 @@ rm -rf "$dir"
 # ---------------------------------------------------------------------------
 section "pr-merge-guard.sh（gh はスタブ）"
 dir="$(new_project)"
-write_state "$dir" phase_4_5 '.phase_5_progress = {base_branch:"feature/xxx"}'
+write_state "$dir" implementation '.implementation_progress = {base_branch:"feature/xxx"}'
 
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'git status')")"
 assert_empty "gh pr merge を含まないコマンドは素通り" "$out"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # SessionStart
 # 作業ディレクトリに進行中の dev-flow（doc/process/state.json）があれば、
-# 現在フェーズと次のアクションをセッション開始時のコンテキストに注入する。
+# 次のステージとアクションをセッション開始時のコンテキストに注入する。
 # stdout はそのまま Claude のコンテキストに追加される。
 
 source "$(dirname "$0")/lib.sh"
@@ -13,27 +13,27 @@ if ! state_valid; then
   exit 0
 fi
 
-PHASE="$(current_phase)"
+STAGE="$(next_stage)"
 MODE="$(state_get '.mode')"
-NEXT="$(next_phase_label "$PHASE")"
+NEXT="$(stage_label "$STAGE")"
 
-echo "dev-flow 進行中: current_phase=${PHASE:-null} mode=${MODE:-full} / 次のフェーズ: $NEXT"
+echo "dev-flow 進行中: next_stage=${STAGE:-requirements} mode=${MODE:-full} / 次: $NEXT"
 if [ "$NEXT" = "完了" ]; then
   echo "dev-flow: フローは完了済みです。新しい要件を始める場合は doc/process/state.json を削除してから /dev-flow を実行してください。"
 else
   echo "dev-flow: 続行するには /dev-flow を実行してください。"
 fi
 
-# Phase 5 で人間マージ待ちの PR があれば状態を表示（非ブロッキング再入の入口）
-if [ "$PHASE" = "phase_4_5" ] && [ "$(state_get '.phase_5_progress.pr_numbers | length')" != "" ]; then
+# implementation で人間マージ待ちの PR があれば状態を表示（非ブロッキング再入の入口）
+if [ "$STAGE" = "implementation" ] && [ "$(state_get '.implementation_progress.pr_numbers | length')" != "" ]; then
   PENDING="$(jq -r '
-    .phase_5_progress as $p
+    .implementation_progress as $p
     | ($p.pr_numbers // {}) | to_entries[]
     | select(.key as $g | ($p.completed_groups // []) | index($g) | not)
     | .key as $g | (.value | if type == "array" then .[] else . end) | select(. != null)
     | "\($g) \(.)"' "$STATE" 2>/dev/null)"
   if [ -n "$PENDING" ]; then
-    echo "dev-flow Phase 5 マージ待ち PR:"
+    echo "dev-flow implementation マージ待ち PR:"
     while read -r group num; do
       if command -v gh >/dev/null 2>&1; then
         ST="$(cd "$PROJECT_DIR" && gh pr view "$num" --json state,mergeable,baseRefName --jq '"\(.state) mergeable=\(.mergeable) base=\(.baseRefName)"' 2>/dev/null || echo "状態取得失敗")"

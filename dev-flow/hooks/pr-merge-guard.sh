@@ -5,7 +5,7 @@
 #   常に拒否:   ベースが main / master / develop / release/* / hotfix/*
 #   許可条件:   すべて満たすこと
 #     - ベースが DEV_FLOW_AUTO_MERGE_BASE_PATTERN（既定 ^feature/）に一致し、
-#       state.json.phase_5_progress.base_branch があればそれと一致
+#       state.json.implementation_progress.base_branch があればそれと一致
 #     - PR が OPEN かつ Draft でない
 #     - mergeable == MERGEABLE（コンフリクトなし）
 #     - CI チェックがすべて成功（チェックが 1 つも無ければ拒否）
@@ -77,7 +77,7 @@ if ! printf '%s' "$BASE" | grep -qE "$BASE_PATTERN"; then
   deny "dev-flow hook: PR #$PR のベース '$BASE' は自動マージ対象（${BASE_PATTERN}）ではありません。人間にマージを依頼してください。$URL"
 fi
 if state_valid; then
-  EXPECTED_BASE="$(state_get '.phase_5_progress.base_branch')"
+  EXPECTED_BASE="$(state_get '.implementation_progress.base_branch')"
   if [ -n "$EXPECTED_BASE" ] && [ "$EXPECTED_BASE" != "$BASE" ]; then
     deny "dev-flow hook: PR #$PR のベース '$BASE' が state.json の base_branch '$EXPECTED_BASE' と一致しません。"
   fi
