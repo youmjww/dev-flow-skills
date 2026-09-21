@@ -3,6 +3,7 @@ name: dev-flow-requirements
 description: AI駆動開発フローの requirements ステージ（1/6: 要件定義）。ユーザーと対話しながら要件を深掘りして要件定義書を作成し、曖昧表現リント・用語集整備・REQ-NNN ID付与を行います。技術スタック・GUI/API/E2Eフラグを確定して `doc/process/state.json` を生成します。新規開発フローの初回起動時、または `--from=requirements` で要件から再開する時に使用します。
 model: opus
 allowed-tools: Read Write Edit Bash AskUserQuestion
+disable-model-invocation: true
 ---
 
 # Stage 1/6 requirements: 要件定義

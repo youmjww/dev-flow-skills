@@ -3,6 +3,7 @@ name: dev-flow-bootstrap
 description: AI駆動開発フローの bootstrap ステージ（0: 既存プロジェクトの導入）。ドキュメントの無い既存コードから技術スタック・コード棚卸し・as-is 要件定義書（REQ-NNN）・テスト定義書（既存テストを TC-NNN に対応付け）・API 仕様書・インフラ仕様書・カバレッジ行列を逆生成し、`doc/process/state.json` を作って以降の change / fix / refactor が差分で動ける状態にします。既存プロジェクトで最初の 1 回だけ、`/dev-flow --bootstrap` または dev-flow の STEP 1.5 から起動します。
 model: opus
 allowed-tools: Read Write Edit Bash Agent AskUserQuestion
+disable-model-invocation: true
 ---
 
 # Stage 0 bootstrap: 既存コードからの as-is ドキュメント生成

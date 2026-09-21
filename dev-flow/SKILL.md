@@ -2,8 +2,11 @@
 name: dev-flow
 description: AI駆動開発フローのメインオーケストレーター。requirements → spec → consistency → implementation → test → compliance の 6 ステージをサブエージェント経由で順次実行します。新機能を要件定義から実装まで一気通貫で自動化したい時、または `doc/process/state.json` から既存フローを継続したい時に使用します。
 model: haiku
-# WebSearch / WebFetch はサブエージェント（spec・compliance ステージ）が技術仕様・ライブラリドキュメントを参照するために必要
-allowed-tools: Read Write Edit Bash Agent AskUserQuestion WebSearch WebFetch
+argument-hint: "[--kind=feature|change|fix|refactor] [--from=stage] [--bootstrap] [--dry-run] タスク説明"
+# allowed-tools はこのスキルを呼び出したターンの親セッションにだけ効く（サブエージェントは親のパーミッションモードを継承する）
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion
+# コミット・worktree・PR 作成・自動マージまで行う副作用の大きいワークフローなので、起動は人間の /dev-flow に限定する
+disable-model-invocation: true
 ---
 
 # 開発フローオーケストレーター
@@ -85,17 +88,62 @@ hook からの `additionalContext` に「task_checklist.md のステージ進捗
 
 ---
 
+## 起動時コンテキスト（自動注入）
+
+以下はスキル起動時にシェルで評価され、結果がここに埋め込まれる。STEP 1.2 / STEP 2 はこの結果を読むだけでよく、改めて Bash で確認する必要はない。
+
+### 引数
+
+```
+$ARGUMENTS
+```
+
+### 下流スキルの存在
+
+```!
+for f in requirements spec consistency implementation test compliance bootstrap; do
+  p="$HOME/.claude/skills/dev-flow-$f/SKILL.md"
+  [ -f "$p" ] && echo "OK      dev-flow-$f" || echo "MISSING dev-flow-$f"
+done
+```
+
+### 現在の state.json
+
+```!
+if [ -f doc/process/state.json ]; then cat doc/process/state.json; else echo "(state.json なし)"; fi
+```
+
+### task_checklist.md のステージ進捗
+
+```!
+if [ -f doc/process/task_checklist.md ]; then sed -n '/^## ステージ進捗/,/^## /p' doc/process/task_checklist.md | grep -E '^- \[' || true; else echo "(task_checklist.md なし)"; fi
+```
+
+### 実装コードの有無（テスト系を除く）
+
+```!
+git ls-files 2>/dev/null | grep -vE '(^|/)(tests?|spec|__tests__)/' | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx|py|rb)$' | grep -vE '_test\.(go|py|rb)$' | grep -cE '\.(go|py|ts|tsx|js|jsx|rb|java|rs|kt|swift|c|cpp|cs)$'; true
+```
+
+### hooks の登録状況
+
+```!
+jq -e '[.. | strings | select(test("dev-flow/hooks/"))] | length > 0' "$HOME/.claude/settings.json" >/dev/null 2>&1 && echo "hooks: enabled" || echo "hooks: disabled（setup.sh 未実行。各 STEP の検証を手動で行う）"
+```
+
+---
+
 ## フロー実行
 
 ### STEP 1: 引数の解析
 
-`{{ARGS}}` を解析：
+上の「引数」を解析：
 
 - **TASK**: `--` で始まらない部分
 - **KIND**: `--kind=` の値（`feature` / `change` / `fix` / `refactor`）。未指定時は STEP 1.5 で決める
-- **BOOTSTRAP**: ARGS に `"--bootstrap"` が含まれる場合は `true`。STEP 1.5 の判定を飛ばして `bootstrap` ステージを起動する
+- **BOOTSTRAP**: 引数に `"--bootstrap"` が含まれる場合は `true`。STEP 1.5 の判定を飛ばして `bootstrap` ステージを起動する
 - **FROM**: `--from=` の値（指定時は state.json の `next_stage` にその値を書いてから開始する）
-- **DRY_RUN**: ARGS に `"--dry-run"` が含まれる場合は `true`。サブエージェントを起動せずフロー構成を検証して終了する
+- **DRY_RUN**: 引数に `"--dry-run"` が含まれる場合は `true`。サブエージェントを起動せずフロー構成を検証して終了する
 
 `--from` の有効値はステージ名そのもの（`requirements` / `spec` / `consistency` / `implementation` / `test` / `compliance`）。`requirements` は state.json 不要（requirements ステージが生成する）、それ以外は必要。`plan_repair` は `--from` では指定できない（implementation 内部からのみ遷移）。
 
@@ -105,26 +153,11 @@ hook からの `additionalContext` に「task_checklist.md のステージ進捗
 
 ### STEP 1.2: 下流スキルファイルの事前検証
 
-STEP 1 直後に必ず実行（`--dry-run` の有無に関わらず）。欠損を早期検知する：
-
-```bash
-for f in \
-  ~/.claude/skills/dev-flow-requirements/SKILL.md \
-  ~/.claude/skills/dev-flow-spec/SKILL.md \
-  ~/.claude/skills/dev-flow-consistency/SKILL.md \
-  ~/.claude/skills/dev-flow-implementation/SKILL.md \
-  ~/.claude/skills/dev-flow-test/SKILL.md \
-  ~/.claude/skills/dev-flow-compliance/SKILL.md \
-  ~/.claude/skills/dev-flow-bootstrap/SKILL.md; do
-  [ -f "$f" ] || echo "MISSING: $f"
-done
-```
-
-判定と後続動作：
+「起動時コンテキスト › 下流スキルの存在」の結果で判定する（`--dry-run` の有無に関わらず）：
 
 | 検証結果 | DRY_RUN=false | DRY_RUN=true |
 |---|---|---|
-| `MISSING:` 行が1件以上 | AskUserQuestion で人間に報告して中断 | 下記 dry-run 出力で欠損行を `✗` で示してから終了 |
+| `MISSING` 行が1件以上 | AskUserQuestion で人間に報告して中断 | 下記 dry-run 出力で欠損行を `✗` で示してから終了 |
 | すべて存在 | STEP 1.5 へ進む | 下記 dry-run 出力で全行 `✓` を示してから終了（STEP 1.5 以降はスキップ） |
 
 **`--dry-run` 時の出力例:**
@@ -143,18 +176,7 @@ done
 
 **1. 既存実装の確認:**
 
-テストファイルのみのリポジトリを「既存実装あり」と誤判定しないよう、テスト系ファイルを除外してから本体実装をカウントする：
-
-```bash
-git log --oneline -1 2>/dev/null
-git ls-files \
-  | grep -vE '(^|/)(tests?|spec|__tests__)/' \
-  | grep -vE '\.(test|spec)\.(ts|tsx|js|jsx|py|rb)$' \
-  | grep -vE '_test\.(go|py|rb)$' \
-  | grep -cE '\.(go|py|ts|tsx|js|jsx|rb|java|rs|kt|swift|c|cpp|cs)$' 2>/dev/null || echo 0
-```
-
-出力が `1` 以上 → 実装コードあり。`0` → `kind = "feature"`, `mode = "full"` で確定（KIND 引数があってもそちらは無視せず、`feature` 以外なら「実装コードが無いので feature として扱う」と伝える）。
+「起動時コンテキスト › 実装コードの有無」の数値で判定する（テスト系ファイルは除外済み）。`1` 以上 → 実装コードあり。`0` → `kind = "feature"`, `mode = "full"` で確定（KIND 引数があってもそちらは無視せず、`feature` 以外なら「実装コードが無いので feature として扱う」と伝える）。
 
 **2. 実装コードがある場合:**
 
@@ -184,7 +206,7 @@ KIND が未指定なら AskUserQuestion で確認（TASK の文面から推測�
 
 ### STEP 2: 状態ファイルの読み込み
 
-`doc/process/state.json` が存在する場合、Read で `next_stage` を確認（旧スキーマなら「状態管理」の対応で読み替える）。`completed` なら STEP 1.5 で新しい run として書き換え済みのはずなので、その値を使う。
+「起動時コンテキスト › 現在の state.json」から `next_stage` を確認（旧スキーマなら「状態管理」の対応で読み替える）。STEP 1.5 で書き換えた場合はそちらが優先。`completed` なら STEP 1.5 で新しい run として書き換え済みのはずなので、その値を使う。
 
 `--from` が指定されている場合（`requirements` 以外）:
 1. state.json が無ければ AskUserQuestion でエラー報告（`reference/error-handling.md`）
@@ -193,7 +215,7 @@ KIND が未指定なら AskUserQuestion で確認（TASK の文面から推測�
 
 ### STEP 3: タスクチェックリストの確認・表示
 
-`doc/process/task_checklist.md` が存在する場合、Read してステージ進捗を人間に表示。
+「起動時コンテキスト › task_checklist.md のステージ進捗」を人間に表示（Read し直す必要はない）。
 
 ### STEP 3.5: エージェント階層安全装置の確認
 
@@ -259,7 +281,7 @@ Agent(
 
 作業ディレクトリ: {pwd の結果}
 状態ファイル: doc/process/state.json
-引数: {ARGS}
+引数: {上の「引数」の内容}
 変更種別: {kind} / タスク: {task}
 開発モード: {mode} / baseline_commit: {baseline_commit}
 
@@ -304,11 +326,7 @@ implementation 内のグループ並列化は `stage-implementation-agent` が�
 - PR の diff に DB の破壊的変更が含まれない（DROP / TRUNCATE / カラム削除・型変更・リネーム、ORM マイグレーションの remove / rename / alter 系、Terraform の DB リソース削除や `skip_final_snapshot = true` 等。パターンは `hooks/db-destructive-patterns.txt`）
 - マージ方式は `--merge` のみ。`--squash` / `--rebase` / `--auto` / `--admin` は拒否。1 コマンド 1 PR、番号または URL で明示
 
-**hook 未導入環境では自動マージを行わない。** 起動時に以下で判定し、登録が無ければ `gh pr merge` を一切発行せず人間に委ねる：
-
-```bash
-jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/settings.json >/dev/null 2>&1 && echo "auto-merge: enabled" || echo "auto-merge: disabled"
-```
+**hook 未導入環境では自動マージを行わない。** 「起動時コンテキスト › hooks の登録状況」が `disabled` なら `gh pr merge` を一切発行せず人間に委ねる（impl エージェントにもその旨をプロンプトで伝える）。
 
 詳細は `~/.claude/skills/dev-flow/reference/state-schema.md` の「implementation の PR マージ待機ロジック」を参照。
 

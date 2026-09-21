@@ -365,6 +365,19 @@ write_state "$dir" implementation '.implementation_progress = {base_branch:"feat
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'git status')")"
 assert_empty "gh pr merge を含まないコマンドは素通り" "$out"
 
+M="gh pr merge"
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json "cat > note.md <<'EOF'
+手順: $M 123 --merge を実行する
+EOF
+echo done")")"
+assert_empty "heredoc 本文に含まれる gh pr merge は素通り（誤検知しない）" "$out"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json "python3 - <<EOF
+print('$M は禁止')
+EOF
+$M 102 --merge")")"
+assert_eq "heredoc の後に本物の gh pr merge があれば検査する" "$(decision "$out")" "deny"
+
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 101 --merge && gh pr merge 102 --merge')")"
 assert_eq "1 コマンド 2 PR は deny" "$(decision "$out")" "deny"
 
