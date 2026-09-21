@@ -19,6 +19,19 @@ case "$FILE" in
     fi
 
     STAGE="$(next_stage)"
+    case "$STAGE" in
+      "" | requirements | spec | consistency | plan_repair | implementation | test | compliance | completed) ;;
+      *)
+        echo "dev-flow hook: state.json の next_stage='${STAGE}' は不正です。requirements / spec / consistency / plan_repair / implementation / test / compliance / completed のいずれかにしてください。" >&2
+        exit 2 ;;
+    esac
+    KIND="$(state_get '.kind')"
+    case "$KIND" in
+      "" | feature | change | fix | refactor | bootstrap) ;;
+      *)
+        echo "dev-flow hook: state.json の kind='${KIND}' は不正です。feature / change / fix / refactor のいずれかにしてください。" >&2
+        exit 2 ;;
+    esac
     PREV="$(last_logged_stage)"
 
     sync_checklist "$STAGE"

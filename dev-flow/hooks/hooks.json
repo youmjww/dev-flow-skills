@@ -45,6 +45,12 @@
             "command": "$HOME/.claude/skills/dev-flow/hooks/state-sync.sh",
             "timeout": 20,
             "statusMessage": "dev-flow 状態同期"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/skills/dev-flow/hooks/doc-validate.sh",
+            "timeout": 30,
+            "statusMessage": "dev-flow 成果物検証"
           }
         ]
       },

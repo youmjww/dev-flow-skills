@@ -64,7 +64,8 @@ state.json は **compliance 完了後も削除しない**（`next_stage: "comple
 | タイミング | hook | オーケストレーターへの影響 |
 |---|---|---|
 | `stage-*-agent` 起動前 | `pre-agent-check.sh` | 下流スキル欠損・state.json 不正・階層深さ超過は `deny`、ステージとエージェントの不一致・同一ステージ 5 回以上は `ask` で止まる。STEP 1.2 / 3.5 の検証を機械的に補完 |
-| `state.json` 書き込み後 | `state-sync.sh` | JSON 不正なら exit 2 で差し戻し。`task_checklist.md` の「ステージ進捗」を `next_stage` に同期（STEP 5-2 の自動化）。`flow.log` に遷移を記録 |
+| `state.json` 書き込み後 | `state-sync.sh` | JSON 不正・`next_stage` / `kind` の値域外なら exit 2 で差し戻し。`task_checklist.md` の「ステージ進捗」を `next_stage` に同期（STEP 5-2 の自動化）。`flow.log` に遷移を記録 |
+| `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | `doc-validate.sh` | frontmatter の ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出しの対応・`status` の値域・チェックリストの 6 行を検証。違反は exit 2 で差し戻す（writer は指摘どおり直して書き直す） |
 | `escalation_*.md` 生成後 | `state-sync.sh` | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` 設定時は Slack 通知 |
 | `stage-*-agent` 完了後 | `agent-complete.sh` | `flow.log` に完了・所要時間を記録。requirements 完了時は人間確認ゲートを念押し |
 | `gh pr merge` 実行前 | `pr-merge-guard.sh` | 自動マージ条件（ベースブランチ・CI・コンフリクト・DB 破壊的変更・`--merge`）を検証し、満たさなければ `deny`。`main` / `develop` 向けは常に拒否 |

@@ -378,6 +378,7 @@ dev-flow-skills/
 │   └── SKILL.md                    # カバレッジ行列検証・準拠チェック
 ├── tests/
 │   └── hooks/                      # hooks のスモークテスト（bash tests/hooks/run.sh）
+├── evals/                          # スキル本体の評価（fixture + 採点器 + claude -p ランナー）。evals/README.md 参照
 └── setup.sh                        # シンボリックリンク作成・hooks 登録スクリプト
 ```
 
@@ -432,7 +433,8 @@ dev-flow-skills/
 | タイミング | 自動で行うこと |
 |---|---|
 | `stage-*-agent` 起動前 | プランモードでないこと・下流スキルの存在・`state.json` の妥当性・階層深さ・ステージとエージェントの対応・同一ステージの再実行回数を検証。違反時は起動を止める |
-| `state.json` 書き込み後 | JSON 検証（壊れていれば差し戻し）、`task_checklist.md` のステージ進捗を同期、`flow.log` に遷移を記録 |
+| `state.json` 書き込み後 | JSON 検証・`next_stage` / `kind` の値域検証（違反は差し戻し）、`task_checklist.md` のステージ進捗を同期、`flow.log` に遷移を記録 |
+| `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | frontmatter のスキーマ検証（ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出し・`status` 値域）。違反は差し戻し |
 | `escalation_*.md` 生成後 | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` を設定していれば Slack に通知（未設定なら通信なし） |
 | `stage-*-agent` 完了後 | 所要時間を `flow.log` に記録。requirements 完了時は人間確認ゲートを念押し |
 | `gh pr merge` 実行前 | 自動マージ条件を検証。`feature/*` 向けの作業ブランチ PR で、CI 全通過・コンフリクトなし・DB 破壊的変更なし・`--merge` 方式のときだけ許可。`main` / `develop` 向けは常に拒否 |
