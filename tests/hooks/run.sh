@@ -310,6 +310,65 @@ assert_contains "--all でサンプルプロジェクトが通る" "$out" "summa
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
+# test-lint.sh / test-lint.py
+# ---------------------------------------------------------------------------
+section "test-lint.sh / test-lint.py"
+TL="$ROOT/tests/test-lint"
+dir="$(new_project)"
+mkdir -p "$dir/pkg/auth" "$dir/tests" "$dir/src" "$dir/tests/Feature"
+
+out="$(run_hook test-lint.sh "$dir" "$(write_json pkg/auth/login.go)")"
+assert_empty "テストファイル以外は素通り" "$out"
+
+cp "$TL/good/login_test.go" "$dir/pkg/auth/login_test.go"
+out="$(run_hook test-lint.sh "$dir" "$(write_json pkg/auth/login_test.go)")"
+assert_eq "正しい Go テストは exit 0" "$(hook_rc)" "0"
+assert_contains "検証 OK が additionalContext に出る" "$(reason "$out")" "テストコード静的検証 OK"
+
+cp "$TL/bad/login_test.go" "$dir/pkg/auth/login_test.go"
+out="$(run_hook test-lint.sh "$dir" "$(write_json pkg/auth/login_test.go)")"
+assert_eq "skip / assert なしの Go テストは exit 2" "$(hook_rc)" "2"
+assert_contains "no-skip が理由に出る" "$(hook_err)" "test/no-skip"
+assert_contains "assert-present が理由に出る" "$(hook_err)" "test/assert-present"
+assert_contains "test_lint_failed が flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=test_lint_failed file=pkg/auth/login_test.go"
+
+for pair in "good/test_login.py:tests/test_login.py" "good/login.test.ts:src/login.test.ts" "good/LoginTest.php:tests/Feature/LoginTest.php"; do
+  src="${pair%%:*}"; dst="${pair#*:}"
+  cp "$TL/$src" "$dir/$dst"
+  out="$(run_hook test-lint.sh "$dir" "$(write_json "$dst")")"
+  assert_eq "正しい $dst は exit 0" "$(hook_rc)" "0"
+done
+for pair in "bad/test_login.py:tests/test_login.py" "bad/login.test.ts:src/login.test.ts" "bad/LoginTest.php:tests/Feature/LoginTest.php"; do
+  src="${pair%%:*}"; dst="${pair#*:}"
+  cp "$TL/$src" "$dir/$dst"
+  out="$(run_hook test-lint.sh "$dir" "$(write_json "$dst")")"
+  assert_eq "違反のある $dst は exit 2" "$(hook_rc)" "2"
+done
+
+# WARN だけのファイルは exit 0 + 警告通知
+cat > "$dir/pkg/auth/warn_test.go" <<'GO'
+package auth
+import ("testing"; "time")
+func TestWarnOnly(t *testing.T) {
+	time.Sleep(10 * time.Millisecond)
+	if Issue(time.Now()) == "" { t.Fatal("empty") }
+}
+GO
+out="$(run_hook test-lint.sh "$dir" "$(write_json pkg/auth/warn_test.go)")"
+assert_eq "WARN のみは exit 0" "$(hook_rc)" "0"
+assert_contains "WARN が additionalContext に出る" "$(reason "$out")" "test/deterministic"
+
+# --all（eval 用）
+out="$(python3 "$HOOKS/test-lint.py" --all "$TL/good")"
+assert_contains "--all で good が 0 errors" "$out" "summary: 0 errors"
+out="$(python3 "$HOOKS/test-lint.py" --all "$TL/bad" || true)"
+assert_contains "--all で bad の全ルールが検出される（no-skip）" "$out" "test/no-skip"
+for r in assert-present empty-test swallowed-error zero-assertions commented-out deterministic tautology ts-ignore; do
+  assert_contains "  ルール test/$r" "$out" "test/$r"
+done
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
 # agent-complete.sh
 # ---------------------------------------------------------------------------
 section "agent-complete.sh"

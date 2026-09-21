@@ -28,23 +28,29 @@
 
 ## レビューチェックリスト（QA reviewer 向け。`test/branch-coverage` は Dev reviewer も）
 
-| ルール ID | 重大度 | 確認内容 | 確認方法 |
-|---|---|---|---|
-| `test/no-delete` | blocker | 既存テストが削除・コメントアウトされていない（移動は可） | `git diff --diff-filter=D`、削除行の `func Test` / `def test_` / `it(` |
-| `test/no-skip` | blocker | スキップ・無効化が追加されていない | `grep -nE 't\.Skip\(|\.skip\(|mark\.skip|markTestSkipped|xit\('` |
-| `test/expected-from-impl` | blocker | 期待値が実装の出力を貼ったものでない（テスト定義書の値と一致） | テスト定義書の「具体的な入出力値」と突き合わせ |
-| `test/error-cases` | major | 変更した公開関数・エンドポイントごとに異常系が 1 つ以上ある | 関数ごとに正常系 / 異常系のテスト数を数える |
-| `test/branch-coverage` | major | 変更した関数の `if` / `switch` / 早期 return / `catch` それぞれを通るケースがある | 分岐を列挙して対応テストを探す。カバレッジレポートがあれば分岐カバレッジの未到達行 |
-| `test/assert-present` | major | すべてのテストに意味のある assert がある | assert の無いテスト関数、`assert true` |
-| `test/no-sut-mock` | major | テスト対象自身・同一モジュールの内部関数をモックしていない | モック対象がインターフェース境界か |
-| `test/tautology` | major | 期待値を実装と同じロジックで計算していない | `expected := f(x)` の形 |
-| `test/independent` | major | 順序依存・共有可変状態・グローバルに依存していない | 単体で実行して通るか、並列実行フラグ |
-| `test/deterministic` | major | 時刻・乱数・実ネットワーク・`sleep` に依存していない | `time.Now` / `Math.random` / `sleep` / 実 URL |
-| `test/error-type` | major | 異常系が「エラーになる」ではなくエラーの種類・コードを検証している | `assert.Error` だけで終わっていないか |
-| `test/side-effects` | minor | 副作用（DB・通知・イベント）が検証されている | 変更系の処理に `assertDatabaseHas` 相当 |
-| `test/tc-id` | minor | テストに TC-ID が対応付けられている | `grep -c 'TC-[0-9]'` |
-| `test/naming` | minor | テスト名から条件と期待結果が読める | 目視 |
-| `test/one-behavior` | minor | 1 テストに複数の振る舞いを詰めていない | assert の数と対象 |
+「機械」列が **hook** のものは `test-lint.py`（Write / Edit 時）または `pr-merge-guard.sh`（PR マージ時）が機械的に判定する。reviewer はその結果（`flow.log` の `test_lint_failed`、hook の WARN）を前提にし、**判断が要るルール**に時間を使う。
+
+| ルール ID | 重大度 | 機械 | 確認内容 | 確認方法（reviewer） |
+|---|---|---|---|---|
+| `test/no-delete` | blocker | hook（PR 時） | 既存テストが削除・コメントアウトされていない（移動は可） | hook が deny 済み。`test/commented-out` の WARN を確認 |
+| `test/no-skip` | blocker | hook（Write 時・PR 時） | スキップ・無効化が追加されていない | hook が exit 2 / deny 済み |
+| `test/expected-from-impl` | blocker | — | 期待値が実装の出力を貼ったものでない（テスト定義書の値と一致） | テスト定義書の「具体的な入出力値」と突き合わせ |
+| `test/error-cases` | major | — | 変更した公開関数・エンドポイントごとに異常系が 1 つ以上ある | 関数ごとに正常系 / 異常系のテスト数を数える |
+| `test/branch-coverage` | major | — | 変更した関数の `if` / `switch` / 早期 return / `catch` それぞれを通るケースがある | 分岐を列挙して対応テストを探す。`result.coverage` の未到達分岐 |
+| `test/assert-present` | major | hook（Write 時、error） | すべてのテストに意味のある assert がある | hook が exit 2 済み。`assert true` 型は目視 |
+| `test/empty-test` | major | hook（Write 時、error） | 本体が空のテストが無い | hook が exit 2 済み |
+| `test/swallowed-error` | major | hook（Write 時、error） | テスト内で例外・エラーを握りつぶしていない | hook が exit 2 済み |
+| `test/no-sut-mock` | major | — | テスト対象自身・同一モジュールの内部関数をモックしていない | モック対象がインターフェース境界か |
+| `test/tautology` | major | hook（Write 時、warn） | 期待値を実装と同じロジックで計算していない | hook の WARN を確認し、該当箇所を判断 |
+| `test/independent` | major | — | 順序依存・共有可変状態・グローバルに依存していない | 単体で実行して通るか、並列実行フラグ |
+| `test/deterministic` | major | hook（Write 時、warn） | 時刻・乱数・実ネットワーク・`sleep` に依存していない | hook の WARN を確認し、正当な例外（タイムアウトのテスト等）か判断 |
+| `test/error-type` | major | — | 異常系が「エラーになる」ではなくエラーの種類・コードを検証している | `assert.Error` だけで終わっていないか |
+| `test/side-effects` | minor | — | 副作用（DB・通知・イベント）が検証されている | 変更系の処理に `assertDatabaseHas` 相当 |
+| `test/tc-id` | minor | — | テストに TC-ID が対応付けられている | `grep -c 'TC-[0-9]'` |
+| `test/naming` | minor | — | テスト名から条件と期待結果が読める | 目視 |
+| `test/one-behavior` | minor | — | 1 テストに複数の振る舞いを詰めていない | assert の数と対象 |
+| `test/commented-out` | minor | hook（Write 時、warn） | コメントアウトされたテストが無い | 消すか復活させるかを人間に確認 |
+| `test/ts-ignore` | minor | hook（Write 時、warn） | テスト内に `@ts-ignore` / `as any` が無い | 型の抜け穴が結果を隠していないか |
 
 ## 標準コマンド（分岐カバレッジ）
 
