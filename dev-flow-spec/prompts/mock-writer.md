@@ -7,6 +7,8 @@
 出力先: `{MOCK_PATH}`（未指定の場合は REQUIREMENTS_PATHS の先頭ファイル名を元に `doc/mock/{同名}.html`）
 技術スタック: `{tech_stack}`
 
+**生成モード: `{KIND}`**。`change` / `fix` で出力先が既に存在する場合は既存 HTML を Read し、`{CHANGED_REQ_IDS}` に関係する画面・要素だけを追加・修正する。既存の id / class 属性は実装コードから参照されているため変更しない。`feature` または出力先が無い場合は全文を新規生成する。
+
 **モック生成ガイドライン:**
 - 1ファイルの自己完結した HTML（外部 CDN は可）
 - 画面遷移がある場合は JavaScript でページ切り替えを実装する

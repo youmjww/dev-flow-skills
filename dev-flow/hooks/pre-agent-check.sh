@@ -26,8 +26,8 @@ if [ -n "$SKILL_FILE" ] && [ ! -f "$SKILL_FILE" ]; then
   deny "dev-flow hook: 下流スキルが見つかりません: $SKILL_FILE 。~/dev-flow-skills/setup.sh を実行してください。"
 fi
 
-# 2. state.json
-if [ "$AGENT" != "stage-requirements-agent" ]; then
+# 2. state.json（requirements と bootstrap は state.json が無い状態で起動される）
+if [ "$AGENT" != "stage-requirements-agent" ] && [ "$AGENT" != "stage-bootstrap-agent" ]; then
   if ! state_exists; then
     deny "dev-flow hook: doc/process/state.json が存在しません。$AGENT は state.json 必須です。requirements から開始するか --from を確認してください。"
   fi
@@ -45,10 +45,13 @@ if state_valid; then
   fi
 fi
 
-# 4. ステージとエージェントの対応
+# 4. ステージとエージェントの対応（bootstrap は state.json 無しでのみ起動する導入ステージなので対象外）
 STAGE="$(next_stage)"
 EXPECTED="$(expected_agent_for_stage "$STAGE")"
-if [ -n "$EXPECTED" ] && [ "$EXPECTED" != "$AGENT" ]; then
+if [ "$AGENT" = "stage-bootstrap-agent" ] && state_exists && [ "$STAGE" != "completed" ]; then
+  ask "dev-flow hook: 進行中の run（next_stage=${STAGE}）があるのに bootstrap を起動しようとしています。bootstrap は導入時に 1 回だけ実行するものです。続けますか？"
+fi
+if [ "$AGENT" != "stage-bootstrap-agent" ] && [ -n "$EXPECTED" ] && [ "$EXPECTED" != "$AGENT" ]; then
   ask "dev-flow hook: next_stage=${STAGE:-requirements} に対応するエージェントは $EXPECTED ですが $AGENT を起動しようとしています。--from 指定なら state.json の next_stage を先に更新してください。続けますか？"
 fi
 

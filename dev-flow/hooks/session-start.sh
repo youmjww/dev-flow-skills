@@ -18,8 +18,8 @@ MODE="$(state_get '.mode')"
 NEXT="$(stage_label "$STAGE")"
 
 echo "dev-flow 進行中: next_stage=${STAGE:-requirements} mode=${MODE:-full} / 次: $NEXT"
-if [ "$NEXT" = "完了" ]; then
-  echo "dev-flow: フローは完了済みです。新しい要件を始める場合は doc/process/state.json を削除してから /dev-flow を実行してください。"
+if [ "$STAGE" = "completed" ]; then
+  echo "dev-flow: 前回の run は完了済み（kind=$(state_get '.kind')）。次の変更は /dev-flow --kind=feature|change|fix|refactor \"内容\" で開始できます（state.json は削除しない）。"
 else
   echo "dev-flow: 続行するには /dev-flow を実行してください。"
 fi

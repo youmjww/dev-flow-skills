@@ -88,7 +88,7 @@ stage_label() {
     implementation) echo "Stage 4/6 implementation: 並列実装" ;;
     test) echo "Stage 5/6 test: テスト実行" ;;
     compliance) echo "Stage 6/6 compliance: 準拠チェック・完了報告" ;;
-    completed) echo "完了" ;;
+    completed) echo "完了（次の変更は /dev-flow --kind=change|fix|refactor で開始）" ;;
     *) echo "不明（$1）" ;;
   esac
 }
@@ -111,6 +111,7 @@ expected_agent_for_stage() {
 skill_file_for_agent() {
   local base="$HOME/.claude/skills"
   case "${1:-}" in
+    stage-bootstrap-agent) echo "$base/dev-flow-bootstrap/SKILL.md" ;;
     stage-requirements-agent) echo "$base/dev-flow-requirements/SKILL.md" ;;
     stage-spec-agent) echo "$base/dev-flow-spec/SKILL.md" ;;
     stage-consistency-agent | stage-plan-repair-agent) echo "$base/dev-flow-consistency/SKILL.md" ;;
