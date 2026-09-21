@@ -1,13 +1,13 @@
 ---
 name: dev-flow-implementation
-description: AI駆動開発フローの並列実装フェーズ（Phase 5）。タスクチェックリストの DAG `depends_on` を解決しながらグループを並列実行し、各グループ内で Dev/QA を独立 worktree で並列実装します。Infra/App/Cross の 3 種類のチーム構成に対応し、推論トレース・Plan Repair・独立レビュアー・Implements/Tests コミットフッターを伴います。整合性チェック完了後、または `--from=implementation` 起動時に使用します。
+description: AI駆動開発フローの implementation ステージ（4/6: 並列実装）。タスクチェックリストの DAG `depends_on` を解決しながらグループを並列実行し、各グループ内で Dev/QA を独立 worktree で並列実装します。Infra/App/Cross の 3 種類のチーム構成に対応し、推論トレース・Plan Repair・独立レビュアー・Implements/Tests コミットフッターを伴います。整合性チェック完了後、または `--from=implementation` 起動時に使用します。
 model: haiku
 allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
 paths: doc/process/state.json
 ---
 
 
-# Phase 5: 並列実装（git worktree ワークフロー）
+# Stage 4/6 implementation: 並列実装（git worktree ワークフロー）
 
 ## 入力
 
@@ -28,13 +28,13 @@ paths: doc/process/state.json
 
 | 項目 | full | incremental |
 |---|---|---|
-| 実装範囲 | チェックリストの全タスク | チェックリストのタスク（差分のみ・既にPhase 4.5で絞り込み済み） |
+| 実装範囲 | チェックリストの全タスク | チェックリストのタスク（差分のみ・既に consistency で絞り込み済み） |
 | 既存コードの扱い | 参照のみ（スタイル・規約を合わせる） | 必ず確認し、既存実装がある箇所はスキップ |
 | dev/qa implementer モデル | `sonnet` | `sonnet` |
 
 ## 事前準備
 
-### 5-pre-a: チェックリストの読み込みと再開判定
+### STEP 0-a: チェックリストの読み込みと再開判定
 
 `doc/process/task_checklist.md` を Read ツールで読み込み、「並列実行グループ」セクションを解析します。
 
@@ -53,9 +53,9 @@ paths: doc/process/state.json
 - `depends_on` に完了済みグループがすべて含まれるグループ → **実行可能**
 - 上記以外 → **待機中**
 
-次に `doc/process/state.json` を Read ツールで読み込み、`phase_5_progress` フィールドを確認します。
+次に `doc/process/state.json` を Read ツールで読み込み、`implementation_progress` フィールドを確認します。
 
-**`phase_5_progress` が存在する場合（前回の中断あり）:**
+**`implementation_progress` が存在する場合（前回の中断あり）:**
 
 0. **マージ待ち PR の取り込み**: `pr_numbers` に番号があり `completed_groups` に無いグループについて、各 PR を `gh pr view <N> --json state,url` で確認する
    - グループの全 PR が `MERGED` → そのグループの STEP H（クリーンアップ・`completed_groups` 追加）を実行
@@ -69,13 +69,13 @@ paths: doc/process/state.json
    ```
 3. AskUserQuestion で人間に確認：「グループ X から再開します。よろしいですか？」
    - 「再開する」→ 完了済みグループをスキップして処理継続
-   - 「最初からやり直す」→ `phase_5_progress` を初期化して全グループを再実行
+   - 「最初からやり直す」→ `implementation_progress` を初期化して全グループを再実行
 
-**`phase_5_progress` が存在しない場合（初回実行）:**
+**`implementation_progress` が存在しない場合（初回実行）:**
 
-まず 5-pre-b でベースブランチを確認してから `phase_5_progress` を初期化します（base_branch が確定してから書き込むため）。
+まず STEP 0-b でベースブランチを確認してから `implementation_progress` を初期化します（base_branch が確定してから書き込むため）。
 
-### 5-pre-b: ベースブランチの確認
+### STEP 0-b: ベースブランチの確認
 
 ```bash
 git branch --show-current
@@ -83,11 +83,11 @@ git branch --show-current
 
 現在のブランチ名を BASE_BRANCH として記録します。
 
-その後 state.json に `phase_5_progress` を初期化して書き込みます：
+その後 state.json に `implementation_progress` を初期化して書き込みます：
 
 ```json
 {
-  "phase_5_progress": {
+  "implementation_progress": {
     "total_groups": {グループ数},
     "completed_groups": [],
     "active_worktrees": [],
@@ -102,11 +102,11 @@ git branch --show-current
 }
 ```
 
-`group_types` は 5-pre-a で抽出したチーム種別をすべて記録します。`pr_numbers` は STEP E で PR を作成するたびに `"group-N": [番号, ...]` を追記します
+`group_types` は STEP 0-a で抽出したチーム種別をすべて記録します。`pr_numbers` は STEP E で PR を作成するたびに `"group-N": [番号, ...]` を追記します
 
 ---
 
-## Phase 5: DAGベースのグループ実行ループ
+## DAGベースのグループ実行ループ
 
 DAGの依存関係に従って、実行可能なグループを並列に処理します。
 
@@ -124,11 +124,11 @@ while 未完了グループが存在する:
   次の実行可能グループを評価して追加起動
 ```
 
-**state.json の `phase_5_progress` に `depends_on` マップを追加:**
+**state.json の `implementation_progress` に `depends_on` マップを追加:**
 
 ```json
 {
-  "phase_5_progress": {
+  "implementation_progress": {
     "depends_on": {
       "group-1": [],
       "group-2": [],
@@ -148,7 +148,7 @@ while 未完了グループが存在する:
 
 `completed_groups` に含まれるグループは **スキップ** して次のグループへ進みます。
 
-まず、`state.json` の `phase_5_progress.group_types["group-N"]` からグループのチーム種別を取得し、実行するエージェントを決定します：
+まず、`state.json` の `implementation_progress.group_types["group-N"]` からグループのチーム種別を取得し、実行するエージェントを決定します：
 
 | チーム種別 | 実行するエージェント | 説明 |
 |---|---|---|
@@ -184,7 +184,7 @@ ensure_worktree() {
 | **App** | `ensure_worktree dev app` + `ensure_worktree qa app` |
 | **Cross** | Infra と App の 4 つすべて |
 
-worktree 作成後、state.json の `phase_5_progress.active_worktrees` に作成したブランチ名を追加します：
+worktree 作成後、state.json の `implementation_progress.active_worktrees` に作成したブランチ名を追加します：
 - Infra: `["dev/infra-group-N", "qa/infra-group-N"]`
 - App: `["dev/app-group-N", "qa/app-group-N"]`
 - Cross: `["dev/infra-group-N", "qa/infra-group-N", "dev/app-group-N", "qa/app-group-N"]`
@@ -265,7 +265,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 - 発動上限 3 回。超過時は `requirement_ambiguity` として人間エスカレーション
 - AskUserQuestion で「承認 / 却下 / 全体再生成」の3択を提示
-- 承認時は `state.json.current_phase` を `"phase_4_5_mini"` に切替えて Phase 4.5 を mini モードで実行、完了後 Phase 5 を未着手グループから再開
+- 承認時は `state.json.next_stage` を `"plan_repair"` に切替えて終了。オーケストレーターが consistency を mini モードで実行し、完了後 implementation を未着手グループから再開
 - 修正履歴は `doc/process/plan_repair_log.md` に追記
 
 JSON パース失敗時のフォールバックは reference 参照。
@@ -340,7 +340,7 @@ PRタイトル例:
 - `feat(infra): グループ N Infra Dev タスク実装`
 - `test(infra): グループ N Infra QA タスク実装`
 
-PR のベースブランチは `phase_5_progress.base_branch`（`--base` で明示する）。作成した PR 番号はすべて `state.json` の `phase_5_progress.pr_numbers["group-N"]` に**配列**で記録する：
+PR のベースブランチは `implementation_progress.base_branch`（`--base` で明示する）。作成した PR 番号はすべて `state.json` の `implementation_progress.pr_numbers["group-N"]` に**配列**で記録する：
 
 ```bash
 gh pr create --base "$BASE_BRANCH" --head dev/infra-group-N --title "..." --body "..." --label infra
@@ -409,7 +409,7 @@ git worktree remove {MAIN_DIR}/../worktree-qa-app-group-N --force
 jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/settings.json >/dev/null 2>&1 && echo enabled || echo disabled
 ```
 
-- `disabled` → `gh pr merge` を発行せず、PR URL を人間に提示して phase-impl-agent を終了する（マージ後に `/dev-flow` で再入）
+- `disabled` → `gh pr merge` を発行せず、PR URL を人間に提示して stage-implementation-agent を終了する（マージ後に `/dev-flow` で再入）
 - `enabled` → グループの各 PR に対して 1 コマンドずつ `gh pr merge <N> --merge --delete-branch` を実行する。hook `pr-merge-guard.sh` が自動マージ条件（ベースが `feature/*` かつ `base_branch` と一致・CI 全通過・コンフリクトなし・DB 破壊的変更なし）を検証し、満たさなければ deny される
 
 結果の扱い：
@@ -433,7 +433,7 @@ deny を回避する目的で `--admin` / `--auto` / `--squash` を試したり�
    - App: `dev/app-group-N`, `qa/app-group-N`
    - Cross: 上記4ブランチすべて
 2. `doc/process/task_checklist.md` のグループNタスクを `[x]` に更新
-3. `doc/process/state.json` の `phase_5_progress` を更新（`completed_groups`に追加、`active_worktrees`をリセット）
+3. `doc/process/state.json` の `implementation_progress` を更新（`completed_groups`に追加、`active_worktrees`をリセット）
 4. 上記2ファイルを1コミットで記録
 
 ---
@@ -443,10 +443,10 @@ deny を回避する目的で `--admin` / `--auto` / `--squash` を試したり�
 すべてのグループ完了後：
 
 1. `doc/process/state.json` を更新：
-   - `current_phase` を `"phase_5"` に変更
-   - `phase_5_progress` を削除
+   - `next_stage` を `"test"` に変更
+   - `implementation_progress` を削除
    - **`mode == "incremental"` の場合のみ**：`baseline_commit` を `git rev-parse HEAD`（ベースブランチに全 PR がマージされた後の最新コミット）で上書き。これにより、次回 `incremental` 実行時の差分基点が今回マージ完了時点に進む
-2. 人間に「Phase 5 完了。次は `/dev-flow` を実行して Phase 6 に進んでください」と通知
+2. 人間に「implementation 完了。次は `/dev-flow` を実行して test（テスト実行）に進んでください」と通知
 
 `baseline_commit` 更新の責任分担詳細は `~/.claude/skills/dev-flow/reference/state-schema.md` の「baseline_commit のライフサイクル」を参照。
 
@@ -476,7 +476,7 @@ gh pr list --state merged --search "head:qa/app-group-N" --json number,mergedAt
 
 グループのすべてのブランチが `merged` であれば：
 
-1. `state.json` の `phase_5_progress.completed_groups` に当該グループを追加
+1. `state.json` の `implementation_progress.completed_groups` に当該グループを追加
 2. ローカルブランチが残存していれば削除
 3. worktree が残存していれば削除（`--force`）
 4. `git fetch origin` で最新状態を取得
@@ -497,5 +497,5 @@ for pr in prs:
 "
 ```
 
-出力を元に `phase_5_progress.completed_groups` を再構築し、`state.json` を手動または自動で復元する。
+出力を元に `implementation_progress.completed_groups` を再構築し、`state.json` を手動または自動で復元する。
 

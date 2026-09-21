@@ -17,7 +17,7 @@ bash ~/dev-flow-skills/setup.sh
 /dev-flow 新機能を実装したい
 ```
 
-各フェーズが完了したら `/dev-flow` を再実行するだけで次フェーズへ進みます。状態は `doc/process/state.json` に保存されるため、セッションをまたいでも継続できます。
+各ステージが完了したら `/dev-flow` を再実行するだけで次ステージへ進みます。状態は `doc/process/state.json` に保存されるため、セッションをまたいでも継続できます。
 
 ---
 
@@ -26,32 +26,34 @@ bash ~/dev-flow-skills/setup.sh
 ```mermaid
 flowchart TD
     Start(["/dev-flow タスク説明"])
-    P12["Phase 1-2<br/>要件定義"]
-    P34["Phase 3-4<br/>ドキュメント生成"]
-    P44["Phase 4.4<br/>Impact Analysis"]
-    P45["Phase 4.5<br/>整合性チェック"]
-    P5["Phase 5<br/>並列実装"]
-    P6["Phase 6<br/>テスト実行"]
-    P78["Phase 7-8<br/>準拠チェック"]
+    S1["1. requirements<br/>要件定義"]
+    S2["2. spec<br/>仕様書生成"]
+    S3["3. consistency<br/>整合性チェック"]
+    S3R["plan_repair<br/>計画修正"]
+    S4["4. implementation<br/>並列実装"]
+    S5["5. test<br/>テスト実行"]
+    S6["6. compliance<br/>準拠チェック"]
     Done([完了])
 
-    Start --> P12 --> P34 --> P44 --> P45 --> P5 --> P6 --> P78 --> Done
+    Start --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> Done
+    S4 -. 計画誤り検出 .-> S3R -.-> S4
 
-    P44:::optional
+    S3R:::optional
     classDef optional stroke-dasharray: 5 5
 ```
 
-> 破線は incremental モード時のみ実行されるフェーズです。
+> 破線の `plan_repair` は implementation 中に計画誤りが見つかったときだけ通る内部サイクルです。incremental モードでは consistency の先頭で Impact Analysis（STEP 0）を実行します。
 
-| Phase | スキル | 役割 | モデル |
+ステージ名は `--from=` の値・`state.json.next_stage`・エージェント名（`stage-<stage>-agent`）・`task_checklist.md` の進捗行で共通です。
+
+| Stage | スキル | 役割 | モデル |
 |---|---|---|---|
-| 1-2 要件定義 | `/dev-flow-requirements` | 対話で要件深掘り・曖昧表現リント・用語集整備・REQ-NNN 付与 | Opus 4.7 |
-| 3-4 ドキュメント生成 | `/dev-flow-spec` | テスト/API/インフラ/モックを並列生成（OpenAPI 3.1.0 / Gherkin） | Haiku（子: Sonnet） |
-| 4.4 Impact Analysis | `/dev-flow-consistency` | incremental mode のみ。差分から影響範囲のタスクを抽出 | Sonnet |
-| 4.5 整合性チェック | `/dev-flow-consistency` | ID整合性・カバレッジ行列・DAG分類・設計凍結 | Haiku（子: Opus） |
-| 5 並列実装 | `/dev-flow-implementation` | DAG依存解決・並列実装・推論トレース・Plan Repair | Sonnet → Opus |
-| 6 テスト実行 | `/dev-flow-test` | 自動モデル昇格でテスト全通過 | Haiku → Sonnet |
-| 7-8 準拠チェック | `/dev-flow-compliance` | カバレッジ行列で機械検証・完了報告 | Opus 4.7 |
+| 1. requirements | `/dev-flow-requirements` | 対話で要件深掘り・曖昧表現リント・用語集整備・REQ-NNN 付与 | Opus 4.7 |
+| 2. spec | `/dev-flow-spec` | テスト/API/インフラ/モックを並列生成（OpenAPI 3.1.0 / Gherkin） | Haiku（子: Sonnet） |
+| 3. consistency | `/dev-flow-consistency` | Impact Analysis（incremental のみ）・ID整合性・カバレッジ行列・DAG分類・設計凍結 | Haiku（子: Opus / Sonnet） |
+| 4. implementation | `/dev-flow-implementation` | DAG依存解決・並列実装・推論トレース・Plan Repair | Sonnet → Opus |
+| 5. test | `/dev-flow-test` | 自動モデル昇格でテスト全通過 | Haiku → Sonnet |
+| 6. compliance | `/dev-flow-compliance` | カバレッジ行列で機械検証・完了報告 | Opus 4.7 |
 
 ---
 
@@ -63,24 +65,26 @@ flowchart TD
 /dev-flow 新機能を実装したい
 ```
 
-各フェーズ完了後に `/dev-flow` を実行するだけで次フェーズへ進みます。
+各ステージ完了後に `/dev-flow` を実行するだけで次ステージへ進みます。
 
-### 特定フェーズから開始
+### 特定ステージから開始
 
 ```
 /dev-flow --from=test
 ```
 
-| オプション | 開始フェーズ |
+| オプション | 開始ステージ |
 |---|---|
-| `--from=requirements` | Phase 1-2（要件定義） |
-| `--from=spec` | Phase 3-4（ドキュメント生成） |
-| `--from=consistency` | Phase 4.5（整合性チェック） |
-| `--from=implementation` | Phase 5（実装） |
-| `--from=test` | Phase 6（テスト） |
-| `--from=compliance` | Phase 7-8（準拠チェック） |
+| `--from=requirements` | 1. requirements（要件定義） |
+| `--from=spec` | 2. spec（仕様書生成） |
+| `--from=consistency` | 3. consistency（整合性チェック） |
+| `--from=implementation` | 4. implementation（並列実装） |
+| `--from=test` | 5. test（テスト実行） |
+| `--from=compliance` | 6. compliance（準拠チェック） |
 
-### フェーズを単独実行
+`requirements` 以外は `doc/process/state.json` が必要です（`next_stage` を指定した値に書き換えて再開します）。
+
+### ステージを単独実行
 
 ```
 /dev-flow-requirements    # 要件定義のみ
@@ -95,14 +99,14 @@ flowchart TD
 
 | モード | 用途 | 指定方法 |
 |---|---|---|
-| `full`（デフォルト） | 新規開発（全フェーズ実行） | `/dev-flow 新機能を追加` |
+| `full`（デフォルト） | 新規開発（全ステージ実行） | `/dev-flow 新機能を追加` |
 | `incremental` | 要件追加（差分のみ実装） | `/dev-flow` 実行時にモード選択 |
 
-`incremental` モードでは Phase 4.4 で baseline_commit 以降の変更を分析し、影響範囲のタスクのみを実装します。
+`incremental` モードでは consistency の STEP 0（Impact Analysis）で baseline_commit 以降の変更を分析し、影響範囲のタスクのみを実装します。
 
 ### プロジェクトタイプ
 
-`is_gui` / `is_api` / `is_infra` / `is_e2e` は Phase 1-2（要件定義）の対話で確定し、`doc/process/state.json` に保存されます。コマンドラインフラグでは指定しません。
+`is_gui` / `is_api` / `is_infra` / `is_e2e` は requirements ステージの対話で確定し、`doc/process/state.json` に保存されます。コマンドラインフラグでは指定しません。
 
 ---
 
@@ -114,13 +118,13 @@ flowchart TD
 
 **ドキュメントが唯一の正解であり、実装はドキュメントに従う。**
 
-| フェーズ | DocDD における役割 |
+| ステージ | DocDD における役割 |
 |---|---|
-| Phase 1-2 要件定義 | 実装の前に要件を文書化し、人間のレビューで凍結する |
-| Phase 3-4 ドキュメント生成 | 要件定義書からテスト定義書・API仕様書・インフラ仕様書・UIモックを先行生成する |
-| Phase 4.5 整合性チェック | ドキュメント間の矛盾を実装前に解消し、設計を凍結する |
-| Phase 5 実装 | 凍結されたドキュメントに従って実装する（ドキュメントの変更は不可） |
-| Phase 7-8 準拠チェック | 実装がドキュメントに準拠しているかを検証する。乖離があれば**実装側を修正する**（ドキュメントは変更しない） |
+| requirements | 実装の前に要件を文書化し、人間のレビューで凍結する |
+| spec | 要件定義書からテスト定義書・API仕様書・インフラ仕様書・UIモックを先行生成する |
+| consistency | ドキュメント間の矛盾を実装前に解消し、設計を凍結する |
+| implementation | 凍結されたドキュメントに従って実装する（ドキュメントの変更は不可） |
+| compliance | 実装がドキュメントに準拠しているかを検証する。乖離があれば**実装側を修正する**（ドキュメントは変更しない） |
 
 コードよりドキュメントが先に存在することで、「何を作るか」の認識齟齬を実装前に解消できます。
 
@@ -128,15 +132,15 @@ flowchart TD
 
 Claude Code のハーネス機能を最大限に活用して、マルチエージェント並列実行と自動エスカレーションを実現しています。
 
-#### 並列ドキュメント生成（Phase 3-4）
+#### 並列ドキュメント生成（spec）
 
-Phase 3-4 のエージェントが writer を**名前付きバックグラウンドサブエージェント**として同時起動し、各 writer の完了通知（最終回答）を受け取るたびに対応する reviewer を起動します。指摘があれば `SendMessage` で同じ名前の writer を再開して修正させます。
+spec ステージのエージェントが writer を**名前付きバックグラウンドサブエージェント**として同時起動し、各 writer の完了通知（最終回答）を受け取るたびに対応する reviewer を起動します。指摘があれば `SendMessage` で同じ名前の writer を再開して修正させます。
 
 Agent Teams（実験的機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）には**依存しません**。すべて標準のサブエージェント機能だけで動作します。
 
 ```mermaid
 flowchart LR
-    PSA([phase-spec-agent<br/>Haiku])
+    PSA([stage-spec-agent<br/>Haiku])
     PSA --> TSW["test-spec-writer<br/>Sonnet<br/>テスト定義書"]
     PSA --> ASW["api-spec-writer<br/>Sonnet<br/>API仕様書"]
     PSA --> ISW["infra-spec-writer<br/>Sonnet<br/>インフラ仕様書"]
@@ -164,7 +168,7 @@ flowchart TD
 
 #### セッションをまたぐ状態管理
 
-各フェーズ完了時に `doc/process/state.json` へ状態を保存し、次回の `/dev-flow` 実行時に自動復元します。`harness` セクションに再現性メタデータ（フェーズ履歴・深度制限）を記録して無限ループを防止します。
+各ステージ完了時に `doc/process/state.json` へ状態を保存し、次回の `/dev-flow` 実行時に自動復元します。`harness` セクションに再現性メタデータ（ステージ履歴・深度制限）を記録して無限ループを防止します。
 
 #### Progressive disclosure
 
@@ -191,7 +195,7 @@ flowchart TD
 
 #### カバレッジ行列
 
-Phase 4.5a-post で `doc/process/coverage_matrix.md` を自動生成します。
+consistency の STEP 3 で `doc/process/coverage_matrix.md` を自動生成します。
 
 ```markdown
 | 要件ID | 要件タイトル | テストID | API/エンドポイント | 実装タスク |
@@ -200,7 +204,7 @@ Phase 4.5a-post で `doc/process/coverage_matrix.md` を自動生成します。
 | REQ-003 | ログアウト | ❌ 未カバー | ❌ | ❌ |
 ```
 
-未カバー要件が検出された場合は人間に判断を求め、Phase 3 に戻るかテスト追加・除外範囲として記録するかを選択できます。Phase 7-pre では、この行列を使って TC-NNN の実装存在・API-NNN のルート定義を機械的に検証します。
+未カバー要件が検出された場合は人間に判断を求め、spec に戻るかテスト追加・除外範囲として記録するかを選択できます。compliance の STEP 1 では、この行列を使って TC-NNN の実装存在・API-NNN のルート定義を機械的に検証します。
 
 #### 機械可読フォーマット
 
@@ -212,7 +216,7 @@ Phase 4.5a-post で `doc/process/coverage_matrix.md` を自動生成します。
 
 ### チーム分離 & DAG 依存実行
 
-Phase 4.5 でタスクを影響範囲に基づいて自動分類し、Phase 5 で必要なチームのみ起動することで、不要なエージェント実行を防ぎます。
+consistency でタスクを影響範囲に基づいて自動分類し、implementation で必要なチームのみ起動することで、不要なエージェント実行を防ぎます。
 
 #### タスク分類ルール
 
@@ -262,7 +266,7 @@ flowchart TD
 
 #### Plan Repair フロー
 
-Phase 5 実装中にエージェントが「計画誤り」を検出した場合（依存関係の発見・グループ分けの誤り等）、`plan_repair_needed` ブロッカーを返します。オーケストレーターは人間に修正方針を確認してから Phase 4.5 を mini モードで再実行し、未着手グループのみチェックリストを更新します。同一フロー内で最大3回まで自動修正し、上限到達後は人間にエスカレーションします。
+implementation 中にエージェントが「計画誤り」を検出した場合（依存関係の発見・グループ分けの誤り等）、`plan_repair_needed` ブロッカーを返します。オーケストレーターは人間に修正方針を確認してから `plan_repair` ステージ（consistency の mini モード）を実行し、未着手グループのみチェックリストを更新します。同一フロー内で最大3回まで自動修正し、上限到達後は人間にエスカレーションします。
 
 #### 構造化通知スキーマ
 
@@ -308,12 +312,12 @@ Phase 5 実装中にエージェントが「計画誤り」を検出した場合
 ```
 dev-flow-skills/
 ├── dev-flow/                       # メインオーケストレーター
-│   ├── SKILL.md                    # 状態管理・フェーズ遷移・サブエージェント起動
+│   ├── SKILL.md                    # 状態管理・ステージ遷移・サブエージェント起動
 │   ├── reference/                  # state.json スキーマ・エスカレーション・エラー対処
 │   └── hooks/                      # 決定的検証（起動前チェック・状態同期・PR マージガード）
-├── dev-flow-requirements/          # Phase 1-2 スキル
+├── dev-flow-requirements/          # 1. requirements
 │   └── SKILL.md                    # 要件定義・曖昧表現リント・用語集生成
-├── dev-flow-spec/                  # Phase 3-4 スキル
+├── dev-flow-spec/                  # 2. spec
 │   ├── SKILL.md                    # ドキュメント並列生成オーケストレーター
 │   └── prompts/
 │       ├── test-spec-writer.md     # テスト定義書（Gherkin形式）
@@ -324,13 +328,13 @@ dev-flow-skills/
 │       ├── infra-spec-reviewer.md  # インフラ仕様書レビュー
 │       ├── mock-writer.md          # UIモック（HTML）
 │       └── mock-reviewer.md        # UIモックレビュー
-├── dev-flow-consistency/           # Phase 4.5 スキル
+├── dev-flow-consistency/           # 3. consistency（+ plan_repair）
 │   ├── SKILL.md                    # ID整合性・カバレッジ行列・Impact Analysis
 │   └── prompts/
 │       ├── consistency-check.md    # ドキュメント整合性チェック
 │       ├── checklist-writer.md     # タスクチェックリスト（DAG依存付き）
 │       └── spec-cache-writer.md    # スペックキャッシュ生成
-├── dev-flow-implementation/        # Phase 5 スキル
+├── dev-flow-implementation/        # 4. implementation
 │   ├── SKILL.md                    # 実装オーケストレーター
 │   ├── reference/
 │   │   ├── plan-repair.md          # Plan Repair フロー詳細手順
@@ -340,9 +344,9 @@ dev-flow-skills/
 │       ├── dev-app.md              # App Dev（推論トレース・JSON通知）
 │       ├── qa-infra.md             # Infra QA（JSON通知）
 │       └── qa-app.md               # App QA（JSON通知）
-├── dev-flow-test/                  # Phase 6 スキル
+├── dev-flow-test/                  # 5. test
 │   └── SKILL.md                    # テスト実行・モデル昇格
-├── dev-flow-compliance/            # Phase 7-8 スキル
+├── dev-flow-compliance/            # 6. compliance
 │   └── SKILL.md                    # カバレッジ行列検証・準拠チェック
 ├── tests/
 │   └── hooks/                      # hooks のスモークテスト（bash tests/hooks/run.sh）
@@ -351,17 +355,17 @@ dev-flow-skills/
 
 ### モデル構成
 
-| フェーズ | スキル | モデル |
+| ステージ | スキル | モデル |
 |---|---|---|
 | オーケストレーター | dev-flow | Haiku 4.5 |
-| Phase 1-2 要件定義 | dev-flow-requirements | Opus 4.7 |
-| Phase 3-4 ドキュメント生成 | dev-flow-spec | Haiku 4.5（子: Sonnet） |
-| Phase 4.4 Impact Analysis | dev-flow-consistency | Sonnet |
-| Phase 4.5 整合性チェック | dev-flow-consistency | Haiku 4.5（整合性チェック子: Opus） |
-| Phase 5 実装 | dev-flow-implementation | Sonnet → Opus（自動昇格） |
-| Phase 5 レビュー | dev-flow-implementation | Opus（昇格ラダーなし・初回から最高品質） |
-| Phase 6 テスト | dev-flow-test | Haiku → Sonnet（自動昇格） |
-| Phase 7-8 準拠チェック | dev-flow-compliance | Opus 4.7 |
+| requirements | dev-flow-requirements | Opus 4.7 |
+| spec | dev-flow-spec | Haiku 4.5（子: Sonnet） |
+| consistency STEP 0 Impact Analysis | dev-flow-consistency | Sonnet |
+| consistency | dev-flow-consistency | Haiku 4.5（整合性チェック子: Opus） |
+| implementation 実装 | dev-flow-implementation | Sonnet → Opus（自動昇格） |
+| implementation レビュー | dev-flow-implementation | Opus（昇格ラダーなし・初回から最高品質） |
+| test | dev-flow-test | Haiku → Sonnet（自動昇格） |
+| compliance | dev-flow-compliance | Opus 4.7 |
 
 ### 生成物一覧
 
@@ -386,7 +390,7 @@ dev-flow-skills/
     ├── coverage_matrix.md          # カバレッジ行列（REQ × TC × API）
     ├── plan_repair_log.md          # Plan Repair 履歴
     ├── reasoning/
-    │   └── phase5-*.md             # 実装エージェントの推論トレース
+    │   └── implementation-*.md     # 実装エージェントの推論トレース
     └── escalation_*.md             # エスカレーション報告（発生時のみ）
 ```
 
@@ -398,24 +402,24 @@ dev-flow-skills/
 
 | タイミング | 自動で行うこと |
 |---|---|
-| `phase-*-agent` 起動前 | 下流スキルの存在・`state.json` の妥当性・階層深さ・フェーズとエージェントの対応・同一フェーズの再実行回数を検証。違反時は起動を止める |
-| `state.json` 書き込み後 | JSON 検証（壊れていれば差し戻し）、`task_checklist.md` のフェーズ進捗を同期、`flow.log` に遷移を記録 |
+| `stage-*-agent` 起動前 | プランモードでないこと・下流スキルの存在・`state.json` の妥当性・階層深さ・ステージとエージェントの対応・同一ステージの再実行回数を検証。違反時は起動を止める |
+| `state.json` 書き込み後 | JSON 検証（壊れていれば差し戻し）、`task_checklist.md` のステージ進捗を同期、`flow.log` に遷移を記録 |
 | `escalation_*.md` 生成後 | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` を設定していれば Slack に通知（未設定なら通信なし） |
-| `phase-*-agent` 完了後 | 所要時間を `flow.log` に記録。Phase 2 完了時は人間確認ゲートを念押し |
+| `stage-*-agent` 完了後 | 所要時間を `flow.log` に記録。requirements 完了時は人間確認ゲートを念押し |
 | `gh pr merge` 実行前 | 自動マージ条件を検証。`feature/*` 向けの作業ブランチ PR で、CI 全通過・コンフリクトなし・DB 破壊的変更なし・`--merge` 方式のときだけ許可。`main` / `develop` 向けは常に拒否 |
-| セッション開始 / 応答完了 | 進行中フローの現在フェーズと次アクションを表示 |
+| セッション開始 / 応答完了 | 進行中フローの次ステージとアクションを表示 |
 
-dev-flow を使っていないプロジェクト（`doc/process/state.json` がない、`phase-*-agent` を起動しない）では何もしません。詳細・単体テスト方法は [`dev-flow/hooks/README.md`](dev-flow/hooks/README.md) を参照してください。
+dev-flow を使っていないプロジェクト（`doc/process/state.json` がない、`stage-*-agent` を起動しない）では何もしません。詳細・単体テスト方法は [`dev-flow/hooks/README.md`](dev-flow/hooks/README.md) を参照してください。
 
 Slack 通知を有効にするには `~/.claude/settings.json` の `env` に `SLACK_BOT_TOKEN` と `DEV_FLOW_SLACK_CHANNEL`（例: `#dev-flow-alerts`）を設定します。
 
-### Phase 5 の PR マージ（非ブロッキング・条件付き自動マージ）
+### implementation の PR マージ（非ブロッキング・条件付き自動マージ）
 
 ```
 main ← develop ← feature/xxx ← dev/app-group-1, qa/app-group-1, ...
 ```
 
-Phase 5 は `feature/xxx`（まとめブランチ）上で実行し、各グループの作業ブランチから `feature/xxx` へ PR を作ります。PR 作成後、`gh pr merge <N> --merge` を試行し、hook が次の条件をすべて満たすと判定した場合だけマージされます。
+implementation は `feature/xxx`（まとめブランチ）上で実行し、各グループの作業ブランチから `feature/xxx` へ PR を作ります。PR 作成後、`gh pr merge <N> --merge` を試行し、hook が次の条件をすべて満たすと判定した場合だけマージされます。
 
 - ベースが `feature/*`（`DEV_FLOW_AUTO_MERGE_BASE_PATTERN` で変更可）で、`state.json` の `base_branch` と一致
 - CI チェックがすべて成功（CI の無い PR は対象外）
@@ -435,11 +439,10 @@ rm doc/process/state.json
 /dev-flow
 ```
 
-**特定フェーズからやり直す**
+**特定ステージからやり直す**
 
 ```bash
-rm doc/process/state.json
-/dev-flow --from=spec
+/dev-flow --from=spec   # state.json は残したまま。next_stage を書き換えて再開する
 ```
 
 **Plan Repair が繰り返し発動する**

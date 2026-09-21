@@ -1,7 +1,7 @@
 #!/bin/bash
 # PostToolUse (matcher: Write|Edit)
 # doc/process/ 配下への書き込みを監視する。
-#   - state.json: JSON 妥当性を検証し、task_checklist.md のフェーズ進捗を current_phase と同期、flow.log に遷移を記録
+#   - state.json: JSON 妥当性を検証し、task_checklist.md のステージ進捗を next_stage と同期、flow.log に遷移を記録
 #   - escalation_*.md: flow.log に記録し、DEV_FLOW_SLACK_CHANNEL が設定されていれば Slack へ通知
 # 対象外のファイルでは何もしない。
 
@@ -18,29 +18,29 @@ case "$FILE" in
       exit 2
     fi
 
-    PHASE="$(current_phase)"
-    PREV="$(last_logged_phase)"
+    STAGE="$(next_stage)"
+    PREV="$(last_logged_stage)"
 
-    sync_checklist "$PHASE"
+    sync_checklist "$STAGE"
 
-    if [ "${PREV:-}" != "${PHASE:-null}" ]; then
-      log_flow "event=phase_transition phase=${PHASE:-null} prev=${PREV:-none} mode=$(state_get '.mode')"
+    if [ "${PREV:-}" != "${STAGE:-requirements}" ]; then
+      log_flow "event=stage_transition stage=${STAGE:-requirements} prev=${PREV:-none} mode=$(state_get '.mode')"
     fi
 
-    post_context "dev-flow hook: state.json 検証 OK。current_phase=${PHASE:-null}（次: $(next_phase_label "$PHASE")）。task_checklist.md のフェーズ進捗は自動同期済みなので手動更新は不要です。"
+    post_context "dev-flow hook: state.json 検証 OK。next_stage=${STAGE:-requirements}（$(stage_label "$STAGE")）。task_checklist.md のステージ進捗は自動同期済みなので手動更新は不要です。"
     ;;
 
   */doc/process/escalation_*.md | doc/process/escalation_*.md)
     BASENAME="$(basename "$FILE")"
-    PHASE="$(current_phase)"
-    log_flow "event=escalation file=$BASENAME phase=${PHASE:-null}"
+    STAGE="$(next_stage)"
+    log_flow "event=escalation file=$BASENAME stage=${STAGE:-requirements}"
 
     ABS="$FILE"
     [ -f "$ABS" ] || ABS="$PROJECT_DIR/$FILE"
     TITLE="$(grep -m1 '^# ' "$ABS" 2>/dev/null || echo "# $BASENAME")"
     slack_notify ":rotating_light: dev-flow エスカレーション（$(basename "$PROJECT_DIR")）
 ${TITLE#\# }
-phase=${PHASE:-null} / ファイル: doc/process/$BASENAME
+stage=${STAGE:-requirements} / ファイル: doc/process/$BASENAME
 人間の判断が必要です。"
     ;;
 esac

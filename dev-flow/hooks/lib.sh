@@ -34,48 +34,75 @@ state_get() {
   jq -r "$1 // empty" "$STATE" 2>/dev/null || true
 }
 
-current_phase() { state_get '.current_phase'; }
+# ステージ定義
+#   順序: requirements → spec → consistency → implementation → test → compliance → completed
+#   plan_repair は implementation 内部の閉じたサイクル（順序上は consistency と同格）
+#
+# state.json の next_stage は「次に実行するステージ」。旧スキーマ（current_phase = 完了フェーズ）は
+# legacy_stage で読み替える。
 
-# current_phase → 進捗ランク。task_checklist.md のフェーズ進捗行 N は rank >= N で [x] になる。
-#   1: Phase 1-2 完了  2: Phase 3-4 完了  3: Phase 4.5 完了
-#   4: Phase 5 完了    5: Phase 6 完了    6: Phase 7-8 完了
-phase_rank() {
+# 旧 current_phase 値 → next_stage 値
+legacy_stage() {
   case "${1:-}" in
-    phase_2) echo 1 ;;
-    phase_4) echo 2 ;;
-    phase_4_5 | phase_4_5_mini) echo 3 ;;
-    phase_5) echo 4 ;;
-    phase_6) echo 5 ;;
-    phase_8 | completed | done) echo 6 ;;
+    phase_2) echo spec ;;
+    phase_4) echo consistency ;;
+    phase_4_5) echo implementation ;;
+    phase_4_5_mini) echo plan_repair ;;
+    phase_5) echo test ;;
+    phase_6) echo compliance ;;
+    phase_8 | done) echo completed ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# state.json から次に実行するステージを取得（旧 current_phase も読み替える。無ければ空文字 = requirements）
+next_stage() {
+  local v
+  v="$(state_get '.next_stage')"
+  [ -n "$v" ] || v="$(legacy_stage "$(state_get '.current_phase')")"
+  printf '%s\n' "$v"
+}
+
+# next_stage → 進捗ランク。task_checklist.md のステージ進捗行 N は rank >= N で [x] になる。
+#   1: requirements 完了  2: spec 完了  3: consistency 完了
+#   4: implementation 完了  5: test 完了  6: compliance 完了
+stage_rank() {
+  case "${1:-}" in
+    spec) echo 1 ;;
+    consistency) echo 2 ;;
+    implementation | plan_repair) echo 3 ;;
+    test) echo 4 ;;
+    compliance) echo 5 ;;
+    completed) echo 6 ;;
     *) echo 0 ;;
   esac
 }
 
-# current_phase → 次に実行されるフェーズの表示名
-next_phase_label() {
+# next_stage → 表示名（番号付き）
+stage_label() {
   case "${1:-}" in
-    "" | null) echo "Phase 1-2: 要件定義" ;;
-    phase_2) echo "Phase 3-4: ドキュメント生成" ;;
-    phase_4) echo "Phase 4.5: 整合性チェック" ;;
-    phase_4_5) echo "Phase 5: 並列実装" ;;
-    phase_4_5_mini) echo "Phase 4.5（mini）: 計画修正" ;;
-    phase_5) echo "Phase 6: テスト実行" ;;
-    phase_6) echo "Phase 7-8: 準拠チェック・完了" ;;
-    phase_8 | completed | done) echo "完了" ;;
+    "" | null | requirements) echo "Stage 1/6 requirements: 要件定義" ;;
+    spec) echo "Stage 2/6 spec: 仕様書生成" ;;
+    consistency) echo "Stage 3/6 consistency: 整合性チェック" ;;
+    plan_repair) echo "Stage 3/6 plan_repair: 計画修正（implementation 内サイクル）" ;;
+    implementation) echo "Stage 4/6 implementation: 並列実装" ;;
+    test) echo "Stage 5/6 test: テスト実行" ;;
+    compliance) echo "Stage 6/6 compliance: 準拠チェック・完了報告" ;;
+    completed) echo "完了" ;;
     *) echo "不明（$1）" ;;
   esac
 }
 
-# current_phase → オーケストレーターが起動するべきエージェント名
-expected_agent_for_phase() {
+# next_stage → オーケストレーターが起動するべきエージェント名
+expected_agent_for_stage() {
   case "${1:-}" in
-    "" | null) echo "phase-requirements-agent" ;;
-    phase_2) echo "phase-spec-agent" ;;
-    phase_4) echo "phase-consistency-agent" ;;
-    phase_4_5) echo "phase-impl-agent" ;;
-    phase_4_5_mini) echo "phase-consistency-mini-agent" ;;
-    phase_5) echo "phase-test-agent" ;;
-    phase_6) echo "phase-compliance-agent" ;;
+    "" | null | requirements) echo "stage-requirements-agent" ;;
+    spec) echo "stage-spec-agent" ;;
+    consistency) echo "stage-consistency-agent" ;;
+    plan_repair) echo "stage-plan-repair-agent" ;;
+    implementation) echo "stage-implementation-agent" ;;
+    test) echo "stage-test-agent" ;;
+    compliance) echo "stage-compliance-agent" ;;
     *) echo "" ;;
   esac
 }
@@ -84,12 +111,12 @@ expected_agent_for_phase() {
 skill_file_for_agent() {
   local base="$HOME/.claude/skills"
   case "${1:-}" in
-    phase-requirements-agent) echo "$base/dev-flow-requirements/SKILL.md" ;;
-    phase-spec-agent) echo "$base/dev-flow-spec/SKILL.md" ;;
-    phase-consistency-agent | phase-consistency-mini-agent) echo "$base/dev-flow-consistency/SKILL.md" ;;
-    phase-impl-agent) echo "$base/dev-flow-implementation/SKILL.md" ;;
-    phase-test-agent) echo "$base/dev-flow-test/SKILL.md" ;;
-    phase-compliance-agent) echo "$base/dev-flow-compliance/SKILL.md" ;;
+    stage-requirements-agent) echo "$base/dev-flow-requirements/SKILL.md" ;;
+    stage-spec-agent) echo "$base/dev-flow-spec/SKILL.md" ;;
+    stage-consistency-agent | stage-plan-repair-agent) echo "$base/dev-flow-consistency/SKILL.md" ;;
+    stage-implementation-agent) echo "$base/dev-flow-implementation/SKILL.md" ;;
+    stage-test-agent) echo "$base/dev-flow-test/SKILL.md" ;;
+    stage-compliance-agent) echo "$base/dev-flow-compliance/SKILL.md" ;;
     *) echo "" ;;
   esac
 }
@@ -98,26 +125,26 @@ skill_file_for_agent() {
 # task_checklist.md 同期
 # ---------------------------------------------------------------------------
 
-# 「## フェーズ進捗」セクション内の `- [ ] Phase N` 行を current_phase に合わせて [x]/[ ] に揃える。
-# 前進・巻き戻し（Phase 7-8 の仕様変更フローで phase_4 に戻す等）の両方に対応する。
+# 「## ステージ進捗」セクション内の `- [ ] N. <stage>:` 行を next_stage に合わせて [x]/[ ] に揃える。
+# 前進・巻き戻し（compliance の仕様変更フローで consistency に戻す等）の両方に対応する。
 sync_checklist() {
-  local phase="$1"
+  local stage="$1"
   [ -f "$CHECKLIST" ] || return 0
   local rank
-  rank="$(phase_rank "$phase")"
+  rank="$(stage_rank "$stage")"
 
   local tmp
   tmp="$(mktemp)"
   awk -v rank="$rank" '
-    /^## / { in_progress = ($0 ~ /^## フェーズ進捗/) }
-    in_progress && /^- \[[ x]\] Phase / {
+    /^## / { in_progress = ($0 ~ /^## ステージ進捗/) }
+    in_progress && /^- \[[ x]\] [1-6]\. / {
       line = 0
-      if ($0 ~ /Phase 1-2/) line = 1
-      else if ($0 ~ /Phase 3-4/) line = 2
-      else if ($0 ~ /Phase 4\.5/) line = 3
-      else if ($0 ~ /Phase 5/) line = 4
-      else if ($0 ~ /Phase 6/) line = 5
-      else if ($0 ~ /Phase 7-8/) line = 6
+      if ($0 ~ /requirements/) line = 1
+      else if ($0 ~ /spec/) line = 2
+      else if ($0 ~ /consistency/) line = 3
+      else if ($0 ~ /implementation/) line = 4
+      else if ($0 ~ /test/) line = 5
+      else if ($0 ~ /compliance/) line = 6
       if (line > 0) {
         mark = (rank >= line) ? "[x]" : "[ ]"
         sub(/^- \[[ x]\]/, "- " mark)
@@ -132,16 +159,16 @@ sync_checklist() {
 # flow.log
 # ---------------------------------------------------------------------------
 
-# 時系列ログに 1 行追記。形式: `2026-09-03T19:43:00+09:00 event=... key=value ...`
+# 時系列ログに 1 行追記。形式: `2026-09-03T19:43:00+0900 event=... key=value ...`
 log_flow() {
   [ -d "$PROCESS_DIR" ] || return 0
   printf '%s %s\n' "$(TZ=Asia/Tokyo date '+%Y-%m-%dT%H:%M:%S%z')" "$*" >> "$FLOW_LOG"
 }
 
-# flow.log に最後に記録された phase=... の値
-last_logged_phase() {
+# flow.log に最後に記録された stage=... の値
+last_logged_stage() {
   [ -f "$FLOW_LOG" ] || return 0
-  grep -o 'phase=[^ ]*' "$FLOW_LOG" 2>/dev/null | tail -1 | cut -d= -f2
+  grep -o 'stage=[^ ]*' "$FLOW_LOG" 2>/dev/null | tail -1 | cut -d= -f2
 }
 
 # flow.log の最終更新が N 秒以内か

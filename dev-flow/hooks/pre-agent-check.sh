@@ -1,19 +1,19 @@
 #!/bin/bash
 # PreToolUse (matcher: Agent)
-# dev-flow のフェーズエージェント（phase-*-agent）起動前に前提条件を検証する。
+# dev-flow のステージエージェント（stage-*-agent）起動前に前提条件を検証する。
 #   - パーミッションモードが plan（読み取り専用）でないこと
 #   - 下流スキルファイルの存在
-#   - state.json の存在・JSON 妥当性（Phase 1-2 を除く）
+#   - state.json の存在・JSON 妥当性（requirements を除く）
 #   - agent_hierarchy の深さ上限
-#   - current_phase と起動エージェントの対応（ズレは人間に確認）
-#   - 同一フェーズの再実行回数（無限ループ検出）
+#   - next_stage と起動エージェントの対応（ズレは人間に確認）
+#   - 同一ステージの再実行回数（無限ループ検出）
 # 問題があれば permissionDecision=deny/ask で起動を止め、理由を Claude に返す。
 
 source "$(dirname "$0")/lib.sh"
 
 [ "$(jqi '.tool_name')" = "Agent" ] || exit 0
 AGENT="$(jqi '.tool_input.name // empty')"
-case "$AGENT" in phase-*-agent) ;; *) exit 0 ;; esac
+case "$AGENT" in stage-*-agent) ;; *) exit 0 ;; esac
 
 # 0. パーミッションモード（サブエージェントは親のモードを継承するため、plan では書き込みが一切できない）
 if [ "$(jqi '.permission_mode // empty')" = "plan" ]; then
@@ -27,9 +27,9 @@ if [ -n "$SKILL_FILE" ] && [ ! -f "$SKILL_FILE" ]; then
 fi
 
 # 2. state.json
-if [ "$AGENT" != "phase-requirements-agent" ]; then
+if [ "$AGENT" != "stage-requirements-agent" ]; then
   if ! state_exists; then
-    deny "dev-flow hook: doc/process/state.json が存在しません。$AGENT は state.json 必須です。Phase 1-2 から開始するか --from を確認してください。"
+    deny "dev-flow hook: doc/process/state.json が存在しません。$AGENT は state.json 必須です。requirements から開始するか --from を確認してください。"
   fi
   if ! state_valid; then
     deny "dev-flow hook: doc/process/state.json が不正な JSON です。reference/error-handling.md の「state.json 破損」手順で復旧してください。"
@@ -45,20 +45,20 @@ if state_valid; then
   fi
 fi
 
-# 4. フェーズとエージェントの対応
-PHASE="$(current_phase)"
-EXPECTED="$(expected_agent_for_phase "$PHASE")"
+# 4. ステージとエージェントの対応
+STAGE="$(next_stage)"
+EXPECTED="$(expected_agent_for_stage "$STAGE")"
 if [ -n "$EXPECTED" ] && [ "$EXPECTED" != "$AGENT" ]; then
-  ask "dev-flow hook: current_phase=${PHASE:-null} に対応するエージェントは $EXPECTED ですが $AGENT を起動しようとしています。--from 指定なら state.json の current_phase を先に更新してください。続けますか？"
+  ask "dev-flow hook: next_stage=${STAGE:-requirements} に対応するエージェントは $EXPECTED ですが $AGENT を起動しようとしています。--from 指定なら state.json の next_stage を先に更新してください。続けますか？"
 fi
 
-# 5. 無限ループ検出（同一フェーズが phase_history に 5 回以上）
-if state_valid && [ -n "$PHASE" ]; then
-  COUNT="$(jq --arg p "$PHASE" '[.harness.phase_history[]? | select(.phase == $p)] | length' "$STATE" 2>/dev/null || echo 0)"
+# 5. 無限ループ検出（同一ステージが stage_history に 5 回以上）
+if state_valid && [ -n "$STAGE" ]; then
+  COUNT="$(jq --arg s "$STAGE" '[.harness.stage_history[]? | select(.stage == $s)] | length' "$STATE" 2>/dev/null || echo 0)"
   if [ "${COUNT:-0}" -ge 5 ] 2>/dev/null; then
-    ask "dev-flow hook: phase=$PHASE の実行履歴が ${COUNT} 回あります。ループしている可能性があります。続けますか？"
+    ask "dev-flow hook: stage=$STAGE の実行履歴が ${COUNT} 回あります。ループしている可能性があります。続けますか？"
   fi
 fi
 
-log_flow "event=agent_start agent=$AGENT phase=${PHASE:-null} model=$(jqi '.tool_input.model // "default"')"
+log_flow "event=agent_start agent=$AGENT stage=${STAGE:-requirements} model=$(jqi '.tool_input.model // "default"')"
 exit 0
