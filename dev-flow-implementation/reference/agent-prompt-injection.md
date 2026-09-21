@@ -19,6 +19,8 @@
 | `{REVIEW_CHECKLIST}` | 各ファイルの「## レビューチェックリスト」の表を連結 | reviewer |
 | `{STANDARD_COMMANDS}` | 最も具体的なファイル（フレームワーク > 言語）の「## 標準コマンド」 | 両方 |
 
+`doc/process/conventions_verified.md`（version-check の結果）があれば、「変わった項目」「新しい推奨」を `{CONVENTIONS}` と `{REVIEW_CHECKLIST}` の先頭に、「非推奨になった API」を `{REVIEW_CHECKLIST}` に `version/deprecated-*`（major）として追加する。
+
 `doc/conventions.md` にはセクション見出しが無くてもよい。全文を `{CONVENTIONS}` と `{REVIEW_CHECKLIST}` の両方の末尾に「## プロジェクト固有規約（最優先）」として付ける。
 
 reviewer の findings で同じ `rule` が 3 回以上出た場合は下記「memory 保存」のフォーマットで保存する。`rule` がキーになるので表記を揃えること。

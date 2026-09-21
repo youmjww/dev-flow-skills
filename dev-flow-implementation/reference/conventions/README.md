@@ -12,6 +12,7 @@ implementer（書く側）と reviewer（照合する側）の両方に注入す
 | 2 | `conventions/<framework>.md`（あれば） | `framework: Next.js` → `nextjs.md`（`react.md` も先に読む）、`Laravel` → `laravel.md`、`React` → `react.md` |
 | 3 | `{project}/doc/conventions.md`（あれば） | プロジェクト固有の規約。言語・フレームワーク規約と矛盾する場合はこちらが優先 |
 | 4 | プロジェクトの `CLAUDE.md` | サブエージェントが自動で読む。規約が書かれていればレビュー基準として扱う |
+| 0 | `{project}/doc/process/conventions_verified.md` | **最優先**。プロジェクトの実バージョンで公式ドキュメントと照合した差分（[version-check.md](version-check.md)）。無い / バージョン不一致なら注入前に生成する |
 
 言語名の正規化: 大文字小文字・`.js` の有無・`Golang` / `Go` の揺れは無視して一致させる。対応ファイルが無い言語は `_template.md` の観点だけで進め、最終回答で「規約ファイル未整備: {language}」と報告する。
 
@@ -22,6 +23,9 @@ implementer（書く側）と reviewer（照合する側）の両方に注入す
 | 書き方 | implementer | 命名・構成・エラー処理・並行処理・依存・テストの書き方 |
 | レビューチェックリスト | reviewer | ルール ID（`go/errors-wrap` 形式）・重大度・確認方法。**blocker / major は修正必須、minor は記録のみ** |
 | 標準コマンド | 両方 | lint / format / test / 型検査。`tech_stack.linter` 等が空のときのフォールバック |
+| 出典と対象バージョン | version-check | `verified_against`（執筆時に検証したバージョン）、各項目の公式 URL（`{version}` プレースホルダ付き）、`[version-sensitive]`（バージョンで変わる）・`[opinion]`（公式ではない推奨）の印 |
+
+規約ファイルの中身は**執筆時点の知識**で書かれている。「一般的なベストプラクティス」ではあるが原典を都度参照して書いたものではないので、出典表で公式由来か `[opinion]` かを区別し、バージョン依存の項目は version-check で実バージョンの公式ドキュメントに当てる。
 
 重大度の基準：
 

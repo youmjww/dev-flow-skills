@@ -47,12 +47,12 @@ git ls-files | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn | head -20
 
 ```json
 {
-  "tech_stack": { "language": "", "framework": "", "test_framework": "", "db": "", "linter": "", "formatter": "", "e2e_framework": null },
+  "tech_stack": { "language": "", "language_version": "", "framework": "", "framework_version": "", "test_framework": "", "db": "", "linter": "", "formatter": "", "e2e_framework": null },
   "is_api": true, "is_gui": false, "is_infra": false, "is_e2e": false
 }
 ```
 
-AskUserQuestion で提案を提示して確定する（間違いは人間に直させる）。
+`language_version` / `framework_version` はマニフェストの値（`go.mod` の `go 1.23`、`package.json` の `dependencies.next`、`composer.json` の `require.laravel/framework`、`pyproject.toml` の `requires-python`）から取る（`dev-flow-implementation/reference/conventions/version-check.md` の「バージョン検出」表）。AskUserQuestion で提案を提示して確定する（間違いは人間に直させる）。
 
 ## STEP 2: コード棚卸し（inventory）
 

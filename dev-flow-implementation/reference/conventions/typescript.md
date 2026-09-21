@@ -60,3 +60,19 @@ React / Next.js の土台。`react.md` / `nextjs.md` はこのファイルの上
 | lint | `eslint .` |
 | 型検査 | `tsc --noEmit` |
 | test | `vitest run`（または `jest --ci`） |
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | TypeScript 5.x | |
+| `strict`・`@ts-expect-error` | https://www.typescriptlang.org/tsconfig/#strict 、https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-9.html#-ts-expect-error-comments | |
+| `catch (e: unknown)` | https://www.typescriptlang.org/tsconfig/#useUnknownInCatchVariables | |
+| `enum` より `as const` | https://www.typescriptlang.org/docs/handbook/enums.html#objects-vs-enums | 公式が「多くの場合オブジェクトで足りる」と記述。`[opinion]` 寄り |
+| `type` と `interface` の使い分け | https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#differences-between-type-aliases-and-interfaces | `[opinion]`（プロジェクトで統一） |
+| 名前付き export 優先・`utils.ts` 回避 | — | `[opinion]` |
+| `zod` によるランタイム検証 | https://zod.dev/ | `[opinion]`（valibot / ArkType 等でも可。検証すること自体は必須） |
+| `no-floating-promises` | https://typescript-eslint.io/rules/no-floating-promises/ | |
+| リリースノート（照合用） | https://www.typescriptlang.org/docs/handbook/release-notes/overview.html | |

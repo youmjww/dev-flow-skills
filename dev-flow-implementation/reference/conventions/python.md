@@ -64,3 +64,19 @@
 | lint | `ruff check .` |
 | 型検査 | `mypy .`（または `pyright`） |
 | test | `pytest -q -W error` |
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | Python 3.12 | 3.13 の free-threaded ビルド・3.14 の変更は未照合 `[version-sensitive]` |
+| 命名・スタイル | https://peps.python.org/pep-0008/ | |
+| 型ヒント | https://docs.python.org/3/library/typing.html 、https://typing.python.org/en/latest/ | |
+| 例外連鎖 `raise from` | https://docs.python.org/3/tutorial/errors.html#exception-chaining | |
+| `asyncio` の Task 管理・`TaskGroup` | https://docs.python.org/3/library/asyncio-task.html | `TaskGroup` は 3.11+ `[version-sensitive]` |
+| `pytest` / `parametrize` / fixture | https://docs.pytest.org/en/stable/ | |
+| `src/` レイアウト | https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/ | `[opinion]`（推奨だが flat も可） |
+| `ruff` / `mypy` を標準にする | https://docs.astral.sh/ruff/ 、https://mypy.readthedocs.io/ | `[opinion]`（black+flake8、pyright も可） |
+| リリースノート（照合用） | https://docs.python.org/3/whatsnew/{version}.html | `{version}` は `3.13` 形式 |

@@ -62,3 +62,18 @@
 | lint | `go vet ./... && golangci-lint run ./...` |
 | 型検査 | `go build ./...` |
 | test | `go test -race -cover ./...` |
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | Go 1.23 | リリースノート未照合。1.22 以降の `net/http` ルーティング（メソッド・パスパラメータ）は未記載 `[version-sensitive]` |
+| エラーの `%w`・`errors.Is/As` | https://go.dev/blog/go1.13-errors | |
+| 命名・パッケージ・doc コメント | https://go.dev/doc/effective_go 、https://go.dev/wiki/CodeReviewComments | |
+| `context` の受け渡し | https://go.dev/blog/context 、https://pkg.go.dev/context | |
+| テーブル駆動テスト | https://go.dev/wiki/TableDrivenTests | |
+| `util` パッケージ回避・インターフェースは使う側で定義 | https://go.dev/wiki/CodeReviewComments#interfaces 、https://google.github.io/styleguide/go/best-practices | `[opinion]` の色が強い |
+| `time.Now()` の注入 | — | `[opinion]`（テスト可能性のための一般的手法） |
+| リリースノート（照合用） | https://go.dev/doc/go{version} | `{version}` は `1.23` 形式 |

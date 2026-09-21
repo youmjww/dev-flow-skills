@@ -2,6 +2,8 @@
 
 `typescript.md` → `react.md` の上に読む。Pages Router のプロジェクトでは「App Router 固有」の項目を読み替える（`getServerSideProps` 等）。
 
+**バージョンで大きく変わる領域**（必ず version-check で照合）: キャッシュ既定値（14 → 15 で `fetch` が非キャッシュに）、`params` / `searchParams` / `cookies()` / `headers()` の非同期化（15）、Cache Components / `'use cache'`（16、`cacheComponents` フラグ）、`revalidateTag` の第 2 引数（16）。
+
 ## 書き方（implementer 向け）
 
 ### サーバー / クライアントの境界
@@ -20,11 +22,14 @@
 - フォーム送信・変更は Server Action を第一候補。外部から呼ばれる API は Route Handler
 - Server Action / Route Handler の入力は **必ず** `zod` 等でランタイム検証する（クライアントから何でも送れる）
 - Server Action の中で認証・認可を毎回確認する（ページで確認していてもアクションは直接呼べる）
-- 変更後は `revalidatePath` / `revalidateTag` でキャッシュを無効化する。忘れると古いデータが出続ける
+- 変更後は `revalidatePath` / `revalidateTag` でキャッシュを無効化する。忘れると古いデータが出続ける。16 では `revalidateTag(tag, 'max')` のように第 2 引数（プロファイル）を取る `[version-sensitive]`
 - `redirect()` は `try/catch` の外で呼ぶ（内部的に throw するため）
 
 ### キャッシュ・レンダリング
-- `fetch` のキャッシュ挙動（`cache` / `next.revalidate` / `tags`）を明示する。既定挙動はバージョンで変わるので暗黙に頼らない
+- `fetch` のキャッシュ挙動（`cache` / `next.revalidate` / `tags`）を明示する。**15 以降の既定は非キャッシュ**（`cache: 'force-cache'` で明示的にキャッシュ）。14 以前は既定キャッシュだったので、バージョンを確認せずに書かない `[version-sensitive]`
+- 15 以降、`params` / `searchParams`（ページ・レイアウト・Route Handler）と `cookies()` / `headers()` は **Promise**。`const { id } = await params` のように `await` する `[version-sensitive]`
+- 16 の Cache Components（`cacheComponents: true`）を使うプロジェクトでは `'use cache'` ディレクティブと `cacheLife` / `cacheTag` が主役になり、`unstable_cache` / `fetchCache` 等の旧モデルは使わない。どちらのモデルかを `next.config` で確認する `[version-sensitive]`
+- `fetch` を使わない DB アクセスの重複排除は React の `cache()`、キャッシュは `unstable_cache`（旧モデル）または `'use cache'`（Cache Components）
 - 動的にすべき理由（cookie・headers・検索パラメータ）が無ければ静的にする。`export const dynamic = "force-dynamic"` を安易に付けない
 - `loading.tsx` / `Suspense` でストリーミング。ページ全体を 1 つの `await` で止めない
 
@@ -64,3 +69,23 @@
 | 型検査 | `tsc --noEmit` |
 | test | `vitest run` + `playwright test`（E2E） |
 | build | `next build`（型・サーバー/クライアント境界エラーはここで出る。PR 前に必ず通す） |
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | Next.js 16.3（2026-09-21、キャッシュのページのみ） | 他のページは未照合。ドキュメントは常に最新版のみで、旧バージョンは https://github.com/vercel/next.js/tree/v{version}/docs を参照 `[version-sensitive]` |
+| ドキュメント索引（version-check の入口） | https://nextjs.org/docs/llms.txt | |
+| キャッシュ（旧モデル） | https://nextjs.org/docs/app/guides/caching-without-cache-components | 「fetch requests are not cached by default」（16.3 で確認） |
+| Cache Components / `'use cache'` | https://nextjs.org/docs/app/getting-started/caching 、https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents | 16 で導入 |
+| Server / Client Components | https://nextjs.org/docs/app/getting-started/server-and-client-components | |
+| Server Actions・データ変更 | https://nextjs.org/docs/app/getting-started/mutating-data | |
+| `server-only` | https://www.npmjs.com/package/server-only | |
+| Route Handlers | https://nextjs.org/docs/app/api-reference/file-conventions/route | |
+| `revalidatePath` / `revalidateTag` | https://nextjs.org/docs/app/api-reference/functions/revalidatePath 、https://nextjs.org/docs/app/api-reference/functions/revalidateTag | |
+| 非同期 `params` / `cookies` | https://nextjs.org/docs/app/api-reference/file-conventions/page | 15 の破壊的変更 |
+| `next/image` / `next/link` / `metadata` | https://nextjs.org/docs/app/api-reference/components/image 、https://nextjs.org/docs/app/api-reference/functions/generate-metadata | |
+| Server Action 内で毎回認可 | https://nextjs.org/docs/app/guides/authentication | |
+| アップグレードガイド（照合用） | https://nextjs.org/docs/app/guides/upgrading | |

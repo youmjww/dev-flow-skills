@@ -209,7 +209,9 @@ AskUserQuestion ツールを使用してブロッキングレビューを行い�
      "mock_path": null,
      "tech_stack": {
        "language": "...",
+       "language_version": "{go.mod / .python-version / package.json engines / composer.json require.php から検出。不明なら null}",
        "framework": "...",
+       "framework_version": "{package.json dependencies.next 等 / composer.json require.laravel/framework から検出。不明なら null}",
        "test_framework": "...",
        "db": "...",
        "linter": "...",

@@ -8,12 +8,16 @@ root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dev-flow-
 errors = []
 for f in sorted(glob.glob(os.path.join(root, "*.md"))):
     name = os.path.basename(f)
-    if name in ("README.md", "_template.md"):
+    if name in ("README.md", "_template.md", "version-check.md"):
         continue
     s = open(f, encoding="utf-8").read()
-    for sec in ("## 書き方", "## レビューチェックリスト", "## 標準コマンド"):
+    for sec in ("## 書き方", "## レビューチェックリスト", "## 標準コマンド", "## 出典と対象バージョン"):
         if sec not in s:
             errors.append(f"{name}: セクション「{sec}」がありません")
+    if "## 出典と対象バージョン" in s and "| verified_against |" not in s:
+        errors.append(f"{name}: 出典表に verified_against 行がありません")
+    if "## 出典と対象バージョン" in s and not re.search(r"https?://", s.split("## 出典と対象バージョン", 1)[1]):
+        errors.append(f"{name}: 出典表に URL がありません")
     rows = re.findall(r"^\| `([a-z]+)/([a-z0-9-]+)` \| (\w+) \|", s, re.M)
     if not rows:
         errors.append(f"{name}: チェックリストの行（| `prefix/rule` | severity |）が見つかりません")

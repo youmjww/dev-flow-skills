@@ -55,3 +55,21 @@
 ## 標準コマンド
 
 `typescript.md` と同じ。lint に `eslint-plugin-react-hooks` と `eslint-plugin-jsx-a11y` が入っていることを確認する。
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | React 18 | **React 19 未照合** `[version-sensitive]`: `forwardRef` 不要化（`ref` が props）、`use()`、Actions / `useActionState` / `useOptimistic`、React Compiler による `useMemo` / `useCallback` の不要化。19 系では本ファイルの「パフォーマンス」節と `ref` 周りを version-check で必ず照合する |
+| `useEffect` を同期にだけ使う | https://react.dev/learn/you-might-not-need-an-effect 、https://react.dev/learn/synchronizing-with-effects | |
+| クリーンアップ | https://react.dev/learn/synchronizing-with-effects#how-to-handle-the-effect-firing-twice-in-development | |
+| 関数形式の state 更新 | https://react.dev/reference/react/useState#updating-state-based-on-the-previous-state | |
+| `key` に index を使わない | https://react.dev/learn/rendering-lists#why-does-react-need-keys | |
+| `useMemo` は計測してから | https://react.dev/reference/react/useMemo#should-you-add-usememo-everywhere | |
+| `React.FC` を使わない | — | `[opinion]`（公式の例も関数宣言） |
+| Testing Library の query 優先順位 | https://testing-library.com/docs/queries/about/#priority | |
+| `user-event` | https://testing-library.com/docs/user-event/intro | |
+| a11y | https://react.dev/learn/accessibility 、https://github.com/jsx-eslint/eslint-plugin-jsx-a11y | |
+| リリースノート（照合用） | https://react.dev/blog 、https://react.dev/versions | |

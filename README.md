@@ -330,7 +330,7 @@ implementation 中にエージェントが「計画誤り」を検出した場�
 
 #### 言語・フレームワーク別の規約とレビューチェックリスト
 
-`dev-flow-implementation/reference/conventions/` に Go / Python / TypeScript / React / Next.js / PHP / Laravel の規約を置き、`tech_stack` から言語 → フレームワーク → `doc/conventions.md`（プロジェクト固有、最優先）の順に選んで注入します。implementer には「書き方」、reviewer には「レビューチェックリスト」（ルール ID + 重大度 + 確認方法）が渡り、レビュー結果は `{severity, rule, file, line, problem, fix}` の JSON で返ります。blocker / major は修正必須、minor は記録のみ。同じ `rule` が 3 回出たら memory に保存して次回から冒頭に注入します。lint / format / 型検査の終了コードは完了 JSON に必須で、0 以外はレビューに進みません。既存プロジェクトでは bootstrap が `doc/conventions.md` の草案をコードから起こします。
+`dev-flow-implementation/reference/conventions/` に Go / Python / TypeScript / React / Next.js / PHP / Laravel の規約を置き、`tech_stack` から言語 → フレームワーク → `doc/conventions.md`（プロジェクト固有、最優先）の順に選んで注入します。各ファイルは公式ドキュメントの出典と検証済みバージョンを持ち、バージョンで変わる項目（Next.js のキャッシュ既定値や `await params`、Laravel 11 の骨格変更など）には `[version-sensitive]`、公式ではない推奨には `[opinion]` の印があります。プロジェクトの実バージョンが違う場合は、implementation の前に公式ドキュメントを WebFetch して差分を `doc/process/conventions_verified.md` に書き出し（バージョンが変わるまでキャッシュ）、規約ファイルより優先して注入します。implementer には「書き方」、reviewer には「レビューチェックリスト」（ルール ID + 重大度 + 確認方法）が渡り、レビュー結果は `{severity, rule, file, line, problem, fix}` の JSON で返ります。blocker / major は修正必須、minor は記録のみ。同じ `rule` が 3 回出たら memory に保存して次回から冒頭に注入します。lint / format / 型検査の終了コードは完了 JSON に必須で、0 以外はレビューに進みません。既存プロジェクトでは bootstrap が `doc/conventions.md` の草案をコードから起こします。
 
 #### レビュアー独立性
 

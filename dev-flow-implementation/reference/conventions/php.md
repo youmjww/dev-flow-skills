@@ -60,3 +60,20 @@ Laravel の土台。`laravel.md` はこのファイルの上に読む。
 | lint | `phpstan analyse`（`larastan` 込み、level 6 以上） |
 | 型検査 | 同上（PHPStan が担う） |
 | test | `phpunit`（または `pest`） |
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | PHP 8.3 | 8.4 のプロパティフック・非対称可視性は未記載 `[version-sensitive]` |
+| PSR-12 / PSR-4 | https://www.php-fig.org/psr/psr-12/ 、https://www.php-fig.org/psr/psr-4/ | PER Coding Style 2.0（https://www.php-fig.org/per/coding-style/）が PSR-12 の後継 |
+| `declare(strict_types=1)` | https://www.php.net/manual/en/language.types.declarations.php#language.types.declarations.strict | |
+| コンストラクタプロモーション・`readonly` | https://www.php.net/manual/en/language.oop5.decon.php#language.oop5.decon.constructor.promotion 、https://www.php.net/manual/en/language.oop5.properties.php#language.oop5.properties.readonly-properties | 8.0 / 8.1+ |
+| `enum` | https://www.php.net/manual/en/language.enumerations.php | 8.1+ |
+| 例外の `previous` | https://www.php.net/manual/en/exception.construct.php | |
+| `unserialize` の危険性 | https://www.php.net/manual/en/function.unserialize.php | |
+| PHPStan level | https://phpstan.org/user-guide/rule-levels | level 6 は `[opinion]` |
+| PHPUnit `DataProvider` / Pest | https://docs.phpunit.de/ 、https://pestphp.com/docs | |
+| リリースノート（照合用） | https://www.php.net/releases/{version}/en.php | `{version}` は `8.4` 形式 |

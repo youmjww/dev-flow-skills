@@ -18,7 +18,9 @@
   "mock_path": "doc/mock/feature.html",
   "tech_stack": {
     "language": "Go",
+    "language_version": "1.23",
     "framework": "Gin",
+    "framework_version": "1.10",
     "test_framework": "testing",
     "db": "PostgreSQL",
     "linter": "golangci-lint",
@@ -72,7 +74,7 @@
 | `task` | オーケストレーターの引数 TASK（人間が書いた変更内容）。spec の `fix` 再現 TC や consistency の lite チェックリストが参照する |
 | `mode` | `"full"`（新規）/ `"incremental"`（差分のみ）。実装コードがある時点で `incremental` |
 | `baseline_commit` | `incremental` 時のみ設定。設定主体・更新主体・参照範囲は下記「baseline_commit のライフサイクル」を参照 |
-| `tech_stack` | 言語・フレームワーク等。spec 以降のサブエージェントが参照 |
+| `tech_stack` | 言語・フレームワーク等。spec 以降のサブエージェントが参照。`language_version` / `framework_version` は規約のバージョン照合（`dev-flow-implementation/reference/conventions/version-check.md`）に使う。requirements / bootstrap がマニフェスト（`go.mod` / `package.json` / `composer.json` / `pyproject.toml`）から検出する |
 | `is_gui/is_api/is_infra/is_e2e` | 対応する生成物・テストを有効化するフラグ |
 | `implementation_progress` | implementation 実行中のみ存在。完了時に削除 |
 | `implementation_progress.pr_numbers` | 各グループの PR 番号の**配列**（Infra/App は 2 本、Cross は 4 本）。PR 作成後に stage-implementation-agent が書き込む。`completed_groups` に含まれないグループの番号が「マージ待ち」を表す |

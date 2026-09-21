@@ -2,6 +2,8 @@
 
 `php.md` の上に読む。
 
+**バージョンで大きく変わる領域**（必ず version-check で照合）: 11 でアプリケーション骨格が変更（`app/Http/Kernel.php` / `app/Console/Kernel.php` 廃止、ミドルウェア・例外処理は `bootstrap/app.php` に集約、`config/` の多くが省略可能、`routes/api.php` は `install:api` で追加、Policy は自動発見）。10 以前の手順書・スニペットはそのまま使えない。12 は 11 からの破壊的変更が最小、13 は 2026 Q1 リリース。
+
 ## 書き方（implementer 向け）
 
 ### レイヤと責務
@@ -32,6 +34,7 @@
 - イベント → リスナーの連鎖は追いにくいので、1 段まで。リスナーも `ShouldQueue` を検討
 
 ### 設定・環境
+- 11 以降、ミドルウェアの登録・例外ハンドリング・ルートファイルの追加は `bootstrap/app.php` の `Application::configure()` で行う。`app/Http/Kernel.php` を作らない `[version-sensitive]`
 - `env()` は `config/*.php` の中でだけ呼ぶ。アプリコードからは `config('services.foo.key')`
 - 秘密は `.env`（コミットしない）。`.env.example` は更新する
 - `APP_DEBUG=true` を本番に出さない
@@ -71,3 +74,24 @@
 | lint | `./vendor/bin/phpstan analyse`（larastan） |
 | test | `php artisan test`（`--parallel` 可） |
 | 破壊的変更の確認 | `php artisan migrate:status` と `git diff --name-only -- database/migrations` |
+
+## 出典と対象バージョン
+
+このファイルは執筆時点（2026-09）の知識で書かれている。`verified_against` より新しい / 古いバージョンでは [version-check.md](version-check.md) の手順で公式ドキュメントと照合し、差分は `doc/process/conventions_verified.md` が優先する。`[version-sensitive]` は変わりやすい項目、`[opinion]` は公式ではなくコミュニティの多数派・筆者の推奨で、`doc/conventions.md` で上書きしてよい。
+
+| 項目 | 出典 | 備考 |
+|---|---|---|
+| verified_against | Laravel 12.x（2026-09-21、リリースノートのみ） | 最新は 13.x。ドキュメント URL は `https://laravel.com/framework/docs/{version}/{page}`（`{version}` は `12.x` 形式）で全バージョン参照可 `[version-sensitive]` |
+| リリースノート・サポート表 | https://laravel.com/framework/docs/{version}/releases | 12: PHP 8.2–8.5、13: PHP 8.3–8.5 |
+| アップグレードガイド（照合用） | https://laravel.com/framework/docs/{version}/upgrade | |
+| 11 の骨格変更 | https://laravel.com/framework/docs/11.x/releases | `bootstrap/app.php`、Kernel 廃止 |
+| Form Request・`authorize()` | https://laravel.com/framework/docs/{version}/validation#form-request-validation | |
+| Policy / Gate | https://laravel.com/framework/docs/{version}/authorization | 11+ は自動発見 |
+| API Resource | https://laravel.com/framework/docs/{version}/eloquent-resources | |
+| Eager loading / `preventLazyLoading` | https://laravel.com/framework/docs/{version}/eloquent-relationships#eager-loading 、https://laravel.com/framework/docs/{version}/eloquent#configuring-eloquent-strictness | |
+| Mass assignment / `$fillable` | https://laravel.com/framework/docs/{version}/eloquent#mass-assignment | |
+| マイグレーション | https://laravel.com/framework/docs/{version}/migrations | |
+| Queue / Job（冪等・リトライ） | https://laravel.com/framework/docs/{version}/queues | |
+| テスト（Factory / `actingAs` / fake） | https://laravel.com/framework/docs/{version}/testing 、https://laravel.com/framework/docs/{version}/eloquent-factories 、https://laravel.com/framework/docs/{version}/mocking | |
+| Pint / larastan | https://laravel.com/framework/docs/{version}/pint 、https://github.com/larastan/larastan | |
+| Controller は薄く・Actions / Services | — | `[opinion]`（公式は構成を規定しない。プロジェクトの既存に合わせる） |
