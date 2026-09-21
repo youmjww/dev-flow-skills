@@ -22,6 +22,24 @@ paths: doc/process/state.json
 - is_api
 - is_infra
 - is_e2e
+- kind（`feature` / `change` / `fix`。`refactor` はこのステージを通らない。欠損時は `feature`）
+- baseline_commit（`change` / `fix` のときの差分基点）
+- task（`fix` のときの不具合説明。オーケストレーターの引数 TASK）
+
+### 0. 変更対象 REQ の抽出（kind が `change` / `fix` のとき）
+
+writer に渡す `{CHANGED_REQ_IDS}` を作る：
+
+```bash
+# 差分のある要件定義書と、追加・変更・削除された REQ-ID
+git diff {baseline_commit}..HEAD -- doc/requirements/ | grep -E '^[+-].*REQ-[0-9]+' | sort -u
+```
+
+- `+` 行にだけ現れる ID → `added`、`-` 行にだけ現れる ID → `removed`、両方に現れる ID → `modified`
+- 判定に迷う ID は要件定義書の該当箇所を Read して確認する
+- 結果を `REQ-002 (modified), REQ-007 (added)` の形式で `{CHANGED_REQ_IDS}` に入れる。`fix` で差分が無い場合は `（要件変更なし）` とする
+
+`kind = "fix"` のときは `{FIX_DESCRIPTION}` に task をそのまま渡す。`kind = "fix"` では **test-spec-writer のみ**起動し、API 仕様書・インフラ仕様書・モックは触らない（不具合修正で API が変わるなら `change` として扱う）。
 
 ## STEP 1: ドキュメント生成
 
@@ -40,10 +58,14 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。writer・revi
 
 | name | プロンプトファイル | プレースホルダー | 起動条件 |
 |---|---|---|---|
-| `test-spec-writer` | `prompts/test-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{TEST_SPEC_PATH}` | 常に |
-| `api-spec-writer` | `prompts/api-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{API_SPEC_PATH}`, `{tech_stack}` | IS_API=true |
-| `infra-spec-writer` | `prompts/infra-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{INFRA_SPEC_PATH}`, `{tech_stack}` | IS_INFRA=true |
-| `mock-writer` | `prompts/mock-writer.md` | `{REQUIREMENTS_PATHS}`, `{MOCK_PATH}`, `{tech_stack}` | IS_GUI=true |
+| `test-spec-writer` | `prompts/test-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{TEST_SPEC_PATH}`, `{KIND}`, `{CHANGED_REQ_IDS}`, `{FIX_DESCRIPTION}` | 常に |
+| `api-spec-writer` | `prompts/api-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{API_SPEC_PATH}`, `{tech_stack}`, `{KIND}`, `{CHANGED_REQ_IDS}` | IS_API=true かつ kind ≠ fix |
+| `infra-spec-writer` | `prompts/infra-spec-writer.md` | `{REQUIREMENTS_PATHS}`, `{INFRA_SPEC_PATH}`, `{tech_stack}`, `{KIND}`, `{CHANGED_REQ_IDS}` | IS_INFRA=true かつ kind ≠ fix |
+| `mock-writer` | `prompts/mock-writer.md` | `{REQUIREMENTS_PATHS}`, `{MOCK_PATH}`, `{tech_stack}`, `{KIND}`, `{CHANGED_REQ_IDS}` | IS_GUI=true かつ kind ≠ fix |
+
+reviewer にも `{KIND}` を渡す（差分更新モードでは既存 ID の保持を検証する）。
+
+**差分更新モード（kind = `change` / `fix`）の要点**: writer は既存ファイルを読み、既存 ID を振り直さず、変更のあった REQ に紐づく項目だけ追加・修正して `status: added|modified` を付ける。詳細は各 writer プロンプトに記載。
 
 **テスト定義書の frontmatter テンプレート（test-spec-writer に指示すること）:**
 
@@ -118,7 +140,7 @@ reviewer は最終回答として `{"status":"approved"|"changes_requested","iss
 
 ## STEP 2: 人間レビュー
 
-AskUserQuestion ツールで以下を同時に提示してレビューを依頼：
+AskUserQuestion ツールで以下を同時に提示してレビューを依頼（`change` / `fix` では `status: added|modified` の項目と `git diff` の要約を先に示し、変更箇所に絞ってレビューしてもらう）：
 
 - テスト定義書（TEST_SPEC_PATH）
 - API仕様書（API_SPEC_PATH）（IS_API=true の場合）

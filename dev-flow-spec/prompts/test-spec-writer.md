@@ -6,11 +6,46 @@
 {REQUIREMENTS_PATHS}
 出力先: `{TEST_SPEC_PATH}`（未指定の場合は REQUIREMENTS_PATHS の先頭ファイル名を元に `doc/test-spec/{同名}.md` とする）
 
+**生成モード: `{KIND}`**（`feature` = 新規生成 / `change` = 差分更新 / `fix` = 不具合修正）
+
+`{KIND}` が `change` または `fix` で出力先ファイルが既に存在する場合は**差分更新モード**で動作すること：
+
+- 既存ファイルを最初に Read し、**既存の ID（TC-NNN）と項目は一切振り直さない・削除しない**
+- 変更対象: `{CHANGED_REQ_IDS}`（requirements の差分。`added` / `modified` / `removed` 付き）
+  - `added` の REQ → 新しい ID を**既存の最大番号 + 1** から採番して追記
+  - `modified` の REQ → その REQ を `covers` に持つ既存項目だけを書き換え、他はそのまま
+  - `removed` の REQ → 該当項目を削除せず、見出しに `（廃止: REQ-NNN 削除）` を付けて残す（履歴の追跡用。次回 compliance で除外対象になる）
+- 追加・変更した項目には frontmatter に `status: added` / `status: modified` を付け、変更していない項目には付けない（reviewer と consistency の Impact Analysis がこれを見る）
+- 最終回答に「追加した ID / 変更した ID / 触っていない ID 数」を必ず書く
+
+`{KIND}` が `feature`、または出力先ファイルが存在しない場合は、従来どおり全文を新規生成する。
+
+**`fix` のときの追加ルール:**
+
+不具合の説明: `{FIX_DESCRIPTION}`
+
+- 要件定義書は変更されていない前提。不具合を**再現するテストケース**を「## 不具合再現テストケース」セクションに追加する（通常 1〜3 件）
+- `covers` には不具合が違反している既存の REQ-ID を入れる。該当する REQ が特定できなければ `covers: []` とし、最終回答で「対応 REQ なし」と明記する（consistency が人間に確認する）
+- 期待結果は「修正後にどう振る舞うべきか」を具体値で書く。現状の誤った振る舞いは `**現状（不具合）**:` 行に併記する
+
 **テスト定義書フォーマット:**
 
 各テストケースには **Gherkin 形式の Given-When-Then シナリオ**を含めること。これにより仕様が機械可読になり、BDD フレームワークとの連携が可能になります。
 
 ```markdown
+---
+doc_type: test-spec
+covers: [REQ-001, REQ-002]
+test_cases:
+  - id: TC-001
+    title: （テストケースタイトル）
+    covers: [REQ-001]
+  - id: TC-002
+    title: （テストケースタイトル）
+    covers: [REQ-002]
+    status: added        # 差分更新モードで追加した項目のみ
+---
+
 # テスト定義書
 
 ## 正常系テストケース
