@@ -149,9 +149,31 @@ flow_log_recent() {
   local within="${1:-600}"
   [ -f "$FLOW_LOG" ] || return 1
   local mtime now
-  mtime="$(stat -c %Y "$FLOW_LOG" 2>/dev/null || echo 0)"
+  mtime="$(file_mtime "$FLOW_LOG")"
   now="$(date +%s)"
   [ $((now - mtime)) -le "$within" ]
+}
+
+# ---------------------------------------------------------------------------
+# GNU / BSD 両対応ヘルパー
+# ---------------------------------------------------------------------------
+
+# ファイルの最終更新時刻（epoch 秒）。取得できなければ 0。
+file_mtime() {
+  local f="$1" m
+  m="$(stat -c %Y "$f" 2>/dev/null)" \
+    || m="$(stat -f %m "$f" 2>/dev/null)" \
+    || m=0
+  printf '%s\n' "${m:-0}"
+}
+
+# log_flow が書く ISO8601（例: 2026-09-03T19:43:00+0900）を epoch 秒に変換。変換できなければ空文字。
+iso_to_epoch() {
+  local ts="$1" e
+  e="$(date -d "$ts" +%s 2>/dev/null)" \
+    || e="$(date -j -f '%Y-%m-%dT%H:%M:%S%z' "$ts" +%s 2>/dev/null)" \
+    || e=""
+  printf '%s\n' "$e"
 }
 
 # ---------------------------------------------------------------------------

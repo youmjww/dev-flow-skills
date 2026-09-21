@@ -3,7 +3,7 @@ name: dev-flow
 description: AI駆動開発フローのメインオーケストレーター。要件定義→ドキュメント生成→整合性チェック→並列実装→テスト→準拠チェックの全フェーズをサブエージェント経由で順次実行します。新機能を要件定義から実装まで一気通貫で自動化したい時、または `doc/process/state.json` から既存フローを継続したい時に使用します。
 model: haiku
 # WebSearch / WebFetch はサブエージェント（spec・compliance フェーズ）が技術仕様・ライブラリドキュメントを参照するために必要
-allowed-tools: Read Write Edit Bash Agent TaskCreate TaskUpdate AskUserQuestion WebSearch WebFetch
+allowed-tools: Read Write Edit Bash Agent AskUserQuestion WebSearch WebFetch
 ---
 
 # 開発フローオーケストレーター
@@ -40,6 +40,16 @@ hook からの `additionalContext` に「task_checklist.md のフェーズ進捗
 
 ---
 
+## パーミッションモードの前提
+
+サブエージェントは**親セッションのパーミッションモードを継承**する（Agent ツールの `mode` 引数は無視される）。そのため：
+
+- **プランモード（読み取り専用）で `/dev-flow` を起動しない。** writer / implementer が書き込めずに止まる。hook 導入環境では `pre-agent-check.sh` が `permission_mode = "plan"` のとき `phase-*-agent` の起動を `deny` する。deny されたら「プランモードを抜けて（Shift+Tab）から再実行してください」と案内して終了する
+- 推奨は `acceptEdits` 以上。`default` でも動くが、各サブエージェントの Write / Bash がすべて親セッションの確認プロンプトに上がってくる
+- 計画フェーズはプランモードではなく Phase 1-2 / 3-4 / 4.5 のドキュメントと人間確認ゲートが担う。プランモードを併用しない
+
+---
+
 ## フロー実行
 
 ### STEP 1: 引数の解析
@@ -47,18 +57,23 @@ hook からの `additionalContext` に「task_checklist.md のフェーズ進捗
 `{{ARGS}}` を解析：
 
 - **TASK**: `--` で始まらない部分
-- **FROM**: `--from=` の値（指定時は state.json の current_phase を上書き）
+- **FROM**: `--from=` の値（指定時は state.json の `current_phase` を下表の値に書き換えてから開始する）
 - **DRY_RUN**: ARGS に `"--dry-run"` が含まれる場合は `true`。サブエージェントを起動せずフロー構成を検証して終了する
 
-`--from` 対応表:
+`--from` 対応表（値は下流スキル名の接尾辞と一致させる）:
 
-| 値 | 開始フェーズ | state.json 要否 |
-|---|---|---|
-| `requirements` または 未指定かつ state.json なし | Phase 1 | 不要 |
-| `spec` | Phase 3 | 必要 |
-| `parallel` | Phase 5 | 必要 |
-| `test` | Phase 6 | 必要 |
-| `sync` | Phase 7 | 必要 |
+| 値 | 開始フェーズ | 書き込む `current_phase` | state.json 要否 |
+|---|---|---|---|
+| `requirements` または 未指定かつ state.json なし | Phase 1-2 | `null`（state.json は Phase 1-2 が生成） | 不要 |
+| `spec` | Phase 3-4 | `phase_2` | 必要 |
+| `consistency` | Phase 4.5 | `phase_4` | 必要 |
+| `implementation` | Phase 5 | `phase_4_5` | 必要 |
+| `test` | Phase 6 | `phase_5` | 必要 |
+| `compliance` | Phase 7-8 | `phase_6` | 必要 |
+
+上記以外の値（旧 `parallel` / `sync` を含む）は無効。`reference/error-handling.md` の手順で有効値を提示する。`--from` による書き換えは STEP 2 で行い、hook 導入環境では `state-sync.sh` が同時に `task_checklist.md` を巻き戻す。
+
+`--no-gui` / `--no-api` のようなプロジェクトタイプ指定フラグは**存在しない**。`is_gui` / `is_api` / `is_infra` / `is_e2e` は Phase 1-2（要件定義）が対話で確定して state.json に書く。
 
 ### STEP 1.2: 下流スキルファイルの事前検証
 
@@ -119,7 +134,12 @@ git ls-files \
 
 ### STEP 2: 状態ファイルの読み込み
 
-`doc/process/state.json` が存在する場合、Read で `current_phase` を確認。`--from` 引数が指定されている場合はそちらを優先。
+`doc/process/state.json` が存在する場合、Read で `current_phase` を確認。
+
+`--from` が指定されている場合（`requirements` 以外）:
+1. state.json が無ければ AskUserQuestion でエラー報告（`reference/error-handling.md`）
+2. `current_phase` を STEP 1 の対応表の値に Edit で書き換える（他フィールドは触らない）
+3. `phase_5_progress` が残っている状態で `implementation` より前に戻す場合は、worktree と未マージ PR が残ることを人間に伝えて続行可否を確認する
 
 ### STEP 3: タスクチェックリストの確認・表示
 
@@ -165,12 +185,7 @@ Plan Repair によって設定される一時フェーズ。発動シーケン�
 
 Plan Repair の発動上限は **3 回**。超過時は `requirement_ambiguity` として人間エスカレーション。詳細は `~/.claude/skills/dev-flow-implementation/SKILL.md` の「Plan Repair フロー」および `dev-flow-implementation/reference/plan-repair.md` を参照。
 
-**タスク作成:**
-
-```
-TaskCreate(name: "{タスク名}", description: "dev-flow: {タスク名} を実行中")
-TaskUpdate(id: "{task_id}", status: "in_progress")
-```
+**進捗の表示:** 起動前に「▶ {タスク名} を開始（{エージェント name} / {モデル}）」と人間に一行で表示する。Task 系ツール（`TaskCreate` 等）は使わない。進捗の永続化は `task_checklist.md` と `flow.log`（hook）が担う。
 
 **サブエージェント起動:** オーケストレーターがスキルファイルを事前 Read し、フェーズに必要なセクションのみ抽出してプロンプトに直接埋め込む（トークン削減）。2000トークン以下なら全文渡し可。
 
@@ -214,10 +229,10 @@ Agent(
 | フェーズ | 並列実行可否 | run_in_background |
 |---|---|---|
 | Phase 1-2〜4.5 | 不可（直列） | false |
-| Phase 5 各グループ | グループ間は可 | false（PR マージは待たずに終了して再入する） |
+| Phase 5 各グループ | グループ間は可（impl エージェント内で `run_in_background=true`） | false（PR マージは待たずに終了して再入する） |
 | Phase 6〜7-8 | 不可（直列） | false |
 
-Phase 5 で並列化する場合は `active_worktrees` に追加し SendMessage 完了通知を待つ。Cross グループは直列。
+Phase 5 内のグループ並列化は `phase-impl-agent` が名前付きサブエージェントの完了通知（最終回答）で管理する。Agent Teams（`TeamCreate` / `team_name`）は使わない。Cross グループは直列。
 
 **Phase 5 PR マージの責任分担（非ブロッキング）:**
 
@@ -257,7 +272,7 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 
 `uncertainty_points` が空でない場合は `needs_human_review=true` として扱う。
 
-**1.** `TaskUpdate(id, status: "completed")`
+**1.** 「✓ {タスク名} 完了」と人間に一行で表示する
 
 **2. チェックリスト更新:** `task_checklist.md` が存在する場合、完了フェーズ行の `[ ]` → `[x]` に更新して進捗を表示。hook 導入環境では `state.json` 書き込み時に `state-sync.sh` が自動同期するため、hook の `additionalContext` を確認したうえで Read して進捗を表示するだけでよい（「Hook 連携」参照）。
 

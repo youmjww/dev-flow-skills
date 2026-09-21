@@ -16,7 +16,7 @@ DURATION=""
 if [ -f "$FLOW_LOG" ]; then
   START_TS="$(grep "event=agent_start agent=$AGENT " "$FLOW_LOG" | tail -1 | cut -d' ' -f1)"
   if [ -n "$START_TS" ]; then
-    START_EPOCH="$(date -d "$START_TS" +%s 2>/dev/null || echo "")"
+    START_EPOCH="$(iso_to_epoch "$START_TS")"
     [ -n "$START_EPOCH" ] && DURATION=$(( $(date +%s) - START_EPOCH ))
   fi
 fi

@@ -31,4 +31,4 @@ baseline_commit: `{BASELINE_COMMIT}`
 **除外する情報:** 背景説明、経緯、UI描写、冗長な文章。
 
 `doc/internal/spec_cache.md` に書き出してください。
-完了したら `consistency-orchestrator` に「spec-cache 生成完了: doc/internal/spec_cache.md」と SendMessage で報告してください。
+完了したら SendMessage は使わず、最終回答として「spec-cache 生成完了: doc/internal/spec_cache.md」と生成内容の要約（グループ数・タスク数・判断に迷った点）を返してください。

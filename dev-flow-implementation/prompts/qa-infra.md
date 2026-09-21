@@ -46,7 +46,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 - コミットメッセージ例: `test: {テスト名} を実装`
 - **チェックリストの更新はしない**（マージ後にオーケストレーターが行う）
 
-**5. 全タスク完了 → 以下の JSON で SendMessage する:**
+**5. 全タスク完了 → 以下の JSON を最終回答として返す（SendMessage は使わない。呼び出し元がこの回答を受け取って次の処理を決める）:**
 
 完了時には **自己評価フィールド**を必ず含めること。`uncertainty_points` が1件でもある場合は `needs_human_review` を `true` にすること（迷ったら必ず申告する）。
 
@@ -65,7 +65,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 }
 ```
 
-ブロッカー発生時は `status: "blocked"` で報告する:
+ブロッカー発生時は `status: "blocked"` の JSON を最終回答として返す（その場で作業を止める）:
 
 ```json
 {

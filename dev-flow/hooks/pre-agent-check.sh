@@ -1,6 +1,7 @@
 #!/bin/bash
 # PreToolUse (matcher: Agent)
 # dev-flow のフェーズエージェント（phase-*-agent）起動前に前提条件を検証する。
+#   - パーミッションモードが plan（読み取り専用）でないこと
 #   - 下流スキルファイルの存在
 #   - state.json の存在・JSON 妥当性（Phase 1-2 を除く）
 #   - agent_hierarchy の深さ上限
@@ -13,6 +14,11 @@ source "$(dirname "$0")/lib.sh"
 [ "$(jqi '.tool_name')" = "Agent" ] || exit 0
 AGENT="$(jqi '.tool_input.name // empty')"
 case "$AGENT" in phase-*-agent) ;; *) exit 0 ;; esac
+
+# 0. パーミッションモード（サブエージェントは親のモードを継承するため、plan では書き込みが一切できない）
+if [ "$(jqi '.permission_mode // empty')" = "plan" ]; then
+  deny "dev-flow hook: プランモード（読み取り専用）では $AGENT を起動できません。サブエージェントは親のパーミッションモードを継承し、ドキュメント生成や実装が書き込めずに止まります。プランモードを抜けてから /dev-flow を再実行してください。"
+fi
 
 # 1. 下流スキルファイル
 SKILL_FILE="$(skill_file_for_agent "$AGENT")"

@@ -100,12 +100,9 @@ flowchart TD
 
 `incremental` モードでは Phase 4.4 で baseline_commit 以降の変更を分析し、影響範囲のタスクのみを実装します。
 
-### プロジェクトタイプ指定
+### プロジェクトタイプ
 
-```
-/dev-flow API を実装 --no-gui   # API プロジェクト（UIモック不要）
-/dev-flow 画面を実装 --no-api   # GUI プロジェクト（API仕様書不要）
-```
+`is_gui` / `is_api` / `is_infra` / `is_e2e` は Phase 1-2（要件定義）の対話で確定し、`doc/process/state.json` に保存されます。コマンドラインフラグでは指定しません。
 
 ---
 
@@ -133,20 +130,22 @@ Claude Code のハーネス機能を最大限に活用して、マルチエー�
 
 #### 並列ドキュメント生成（Phase 3-4）
 
-`TeamCreate` で writer エージェントを並列起動し、`doc-orchestrator` が完了通知を集約します。
+Phase 3-4 のエージェントが writer を**名前付きバックグラウンドサブエージェント**として同時起動し、各 writer の完了通知（最終回答）を受け取るたびに対応する reviewer を起動します。指摘があれば `SendMessage` で同じ名前の writer を再開して修正させます。
+
+Agent Teams（実験的機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）には**依存しません**。すべて標準のサブエージェント機能だけで動作します。
 
 ```mermaid
 flowchart LR
-    TC([TeamCreate<br/>doc-team])
-    TC --> TSW["test-spec-writer<br/>Sonnet<br/>テスト定義書"]
-    TC --> ASW["api-spec-writer<br/>Sonnet<br/>API仕様書"]
-    TC --> ISW["infra-spec-writer<br/>Sonnet<br/>インフラ仕様書"]
-    TC --> MW["mock-writer<br/>Sonnet<br/>UIモック"]
-    TSW -. 完了通知 .-> DO
-    ASW -. 完了通知 .-> DO
-    ISW -. 完了通知 .-> DO
-    MW -. 完了通知 .-> DO
-    DO(["doc-orchestrator<br/>Haiku<br/>集約・報告"])
+    PSA([phase-spec-agent<br/>Haiku])
+    PSA --> TSW["test-spec-writer<br/>Sonnet<br/>テスト定義書"]
+    PSA --> ASW["api-spec-writer<br/>Sonnet<br/>API仕様書"]
+    PSA --> ISW["infra-spec-writer<br/>Sonnet<br/>インフラ仕様書"]
+    PSA --> MW["mock-writer<br/>Sonnet<br/>UIモック"]
+    TSW -. 完了 .-> TSR["test-spec-reviewer"]
+    ASW -. 完了 .-> ASR["api-spec-reviewer"]
+    ISW -. 完了 .-> ISR["infra-spec-reviewer"]
+    MW -. 完了 .-> MR["mock-reviewer"]
+    TSR -. changes_requested → SendMessage で再開 .-> TSW
 ```
 
 #### 自動モデル昇格（実装・レビュー）
@@ -291,7 +290,7 @@ Phase 5 実装中にエージェントが「計画誤り」を検出した場合
 
 #### レビュアー独立性
 
-レビュアーエージェントは `disallowed_tools: ["Edit", "Write", "NotebookEdit"]` で起動するため、実装コードを直接書き換えることができません。指摘のみを行い、修正は実装エージェントが担当します。
+レビュアーエージェントにはプロンプトで「ファイルの編集・作成は禁止、指摘は最終回答で返す」を明示し、実装コードを直接書き換えさせません。指摘のみを行い、修正は実装エージェントが担当します（現行の Agent ツールにはツール制限パラメータが無いため、プロンプトで統制します）。
 
 - **Dev レビュアー（懐疑的観点）**: セキュリティホール・新人可読性・アーキテクチャ
 - **QA レビュアー（素朴質問観点）**: 理解できない点・テストの意図が不明な点のみ指摘
@@ -309,7 +308,9 @@ Phase 5 実装中にエージェントが「計画誤り」を検出した場合
 ```
 dev-flow-skills/
 ├── dev-flow/                       # メインオーケストレーター
-│   └── SKILL.md                    # 状態管理・フェーズ遷移・サブエージェント起動
+│   ├── SKILL.md                    # 状態管理・フェーズ遷移・サブエージェント起動
+│   ├── reference/                  # state.json スキーマ・エスカレーション・エラー対処
+│   └── hooks/                      # 決定的検証（起動前チェック・状態同期・PR マージガード）
 ├── dev-flow-requirements/          # Phase 1-2 スキル
 │   └── SKILL.md                    # 要件定義・曖昧表現リント・用語集生成
 ├── dev-flow-spec/                  # Phase 3-4 スキル
@@ -322,8 +323,7 @@ dev-flow-skills/
 │       ├── infra-spec-writer.md    # インフラ仕様書
 │       ├── infra-spec-reviewer.md  # インフラ仕様書レビュー
 │       ├── mock-writer.md          # UIモック（HTML）
-│       ├── mock-reviewer.md        # UIモックレビュー
-│       └── doc-orchestrator.md     # 完了通知集約
+│       └── mock-reviewer.md        # UIモックレビュー
 ├── dev-flow-consistency/           # Phase 4.5 スキル
 │   ├── SKILL.md                    # ID整合性・カバレッジ行列・Impact Analysis
 │   └── prompts/
@@ -344,7 +344,9 @@ dev-flow-skills/
 │   └── SKILL.md                    # テスト実行・モデル昇格
 ├── dev-flow-compliance/            # Phase 7-8 スキル
 │   └── SKILL.md                    # カバレッジ行列検証・準拠チェック
-└── setup.sh                        # シンボリックリンク作成スクリプト
+├── tests/
+│   └── hooks/                      # hooks のスモークテスト（bash tests/hooks/run.sh）
+└── setup.sh                        # シンボリックリンク作成・hooks 登録スクリプト
 ```
 
 ### モデル構成

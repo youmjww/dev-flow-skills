@@ -15,27 +15,16 @@ paths: doc/process/state.json
 - tech_stack
 - is_e2e
 
-## Phase 6-0. チーム作成
+## Phase 6-0. 実行モデル（チーム機能は使わない）
 
-```
-TeamCreate(name: "test-team")
-```
-
-## Phase 6a: test-orchestrator を同期起動
-
-以下のプロンプトで Agent を起動（`team_name="test-team"`, `name="test-orchestrator"`, `run_in_background=false`, `model="haiku"`, `mode="acceptEdits"`）：
-
----
-**test-orchestrator プロンプト**
-
-あなたは test-team のオーケストレーターです。テストランナーを管理してすべてのテストを通過させてください。
+Agent Teams（`TeamCreate` / `team_name`）は使用しません。テストランナーは本エージェントが **同期サブエージェント**（`run_in_background=false`）として順に起動し、**最終回答**で結果を受け取ります。ランナーは SendMessage を送りません。中間オーケストレーター（旧 `test-orchestrator`）も置きません。
 
 技術スタック: `{tech_stack}`
 E2E テストあり: `{IS_E2E}`
 
-### STEP 1: test-runner-haiku の起動
+## Phase 6a: test-runner-haiku を同期起動
 
-以下の設定で `test-runner-haiku` を起動してください（`team_name="test-team"`, `name="test-runner-haiku"`, `run_in_background=true`, `model="haiku"`, `mode="acceptEdits"`）：
+以下の設定で `test-runner-haiku` を起動します（`name="test-runner-haiku"`, `run_in_background=false`, `model="haiku"`）：
 
 **test-runner-haiku プロンプト:**
 
@@ -52,8 +41,8 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 1. ユニットテストを `{tech_stack.test_framework}` で実行し、失敗数を記録する
 2. IS_E2E=true の場合は `{tech_stack.e2e_framework}` で E2E テストも実行し、失敗数を合算する
-3. 全テスト通過 → `test-orchestrator` に「全テスト通過（Haiku）」と SendMessage して終了
-4. 試行回数が2回に達した場合 → 以下のフォーマットで `test-orchestrator` に SendMessage して終了：
+3. 全テスト通過 → 最終回答として「全テスト通過（Haiku）」を返して終了
+4. 試行回数が2回に達した場合 → 以下のフォーマットを最終回答として返して終了：
 
 ```
 ## Haiku 試行上限到達
@@ -75,16 +64,17 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 ---
 
-### STEP 2: test-runner-haiku からの通知待ち
+## Phase 6b: test-runner-haiku の結果判定
 
-`test-runner-haiku` からの SendMessage を受信するまで待機します。
+Agent 呼び出しが返ったら最終回答を読み取ります：
 
-- **「全テスト通過（Haiku）」通知** → STEP 4（完了処理）へ進む
-- **「Haiku 試行上限到達」通知** → STEP 3（Sonnet 昇格）へ進む
+- **「全テスト通過（Haiku）」** → Phase 6d（出力）へ進む
+- **「Haiku 試行上限到達」** → Phase 6c（Sonnet 昇格）へ進む
+- どちらでもない（途中終了・エラー）→ テストを一度 Bash で実行して現状を確認し、失敗が残っていれば Phase 6c へ、通過していれば Phase 6d へ
 
-### STEP 3: Sonnet へ昇格（Haiku が2回失敗した場合のみ実行）
+## Phase 6c: Sonnet へ昇格（Haiku が2回失敗した場合のみ実行）
 
-Haiku の試行履歴を受け取った場合のみ、以下の設定で `test-runner-sonnet` を起動（`team_name="test-team"`, `name="test-runner-sonnet"`, `run_in_background=false`, `model="sonnet"`, `mode="acceptEdits"`）：
+以下の設定で `test-runner-sonnet` を起動します（`name="test-runner-sonnet"`, `run_in_background=false`, `model="sonnet"`）：
 
 **test-runner-sonnet プロンプト:**
 
@@ -109,10 +99,10 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 
 1. ユニットテストを `{tech_stack.test_framework}` で実行し、失敗数を記録する
 2. IS_E2E=true の場合は `{tech_stack.e2e_framework}` で E2E テストも実行し、失敗数を合算する
-3. 全テスト通過 → 「全テスト通過（Sonnet）」を返して終了
+3. 全テスト通過 → 最終回答として「全テスト通過（Sonnet）」を返して終了
 4. **上限チェック**:
-   - 試行回数が3回に達した場合 → エスカレーション報告
-   - 直前2回の失敗数が同じ場合 → エスカレーション報告
+   - 試行回数が3回に達した場合 → 下記フォーマットのエスカレーション報告を最終回答として返して終了
+   - 直前2回の失敗数が同じ場合 → 同上
 5. テストの期待値を正として、プロダクションコードの問題を特定する
 6. プロダクションコードを修正する
 7. 修正した変更を git commit する（コミットメッセージ例: `fix: {失敗テスト名} を修正`）
@@ -146,17 +136,13 @@ E2E テストあり: `{IS_E2E}`（true の場合は E2E テストも対象に含
 （設計の矛盾 / 要件の曖昧さ / その他）
 ```
 
-Sonnet エスカレーション発生時は人間に状況を報告して指示を仰ぐ。
-
-### STEP 4: 完了
-
-テスト全通過を確認したら終了する（このエージェントを終了することで、呼び出し元にテスト完了が伝わる）。
-
 ---
 
-## Phase 6b: 出力
+`test-runner-sonnet` の最終回答がエスカレーション報告だった場合は、`doc/process/escalation_phase_6_{timestamp}.md` に保存したうえで AskUserQuestion で人間に状況を報告して指示を仰ぐ（`~/.claude/skills/dev-flow/reference/escalation-format.md` 参照）。state.json は更新しない。
 
-test-orchestrator の終了を確認したら（= 上の Agent 呼び出しが返ったら）、以下を実行：
+## Phase 6d: 出力
+
+全テスト通過を確認したら、以下を実行：
 
 1. `doc/process/state.json` を更新（current_phase を "phase_6" に）
 2. 人間に「Phase 6 完了。次は `/dev-flow` を実行して Phase 7 に進んでください」と通知

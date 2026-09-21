@@ -7,7 +7,7 @@
 | イベント | matcher | スクリプト | 役割 |
 |---|---|---|---|
 | `SessionStart` | — | `session-start.sh` | `doc/process/state.json` があれば現在フェーズ・次アクション・直近ログをコンテキストに注入 |
-| `PreToolUse` | `Agent` | `pre-agent-check.sh` | `phase-*-agent` 起動前に下流スキル存在・state.json 妥当性・階層深さ・フェーズ対応・ループ回数を検証。問題があれば `deny` / `ask` |
+| `PreToolUse` | `Agent` | `pre-agent-check.sh` | `phase-*-agent` 起動前にプランモードでないこと・下流スキル存在・state.json 妥当性・階層深さ・フェーズ対応・ループ回数を検証。問題があれば `deny` / `ask` |
 | `PostToolUse` | `Write\|Edit` | `state-sync.sh` | `state.json` の JSON 妥当性検証（壊れていれば exit 2 で差し戻し）、`task_checklist.md` フェーズ進捗の自動同期、`flow.log` 記録。`escalation_*.md` 生成時は Slack 通知（opt-in） |
 | `PostToolUse` | `Agent` | `agent-complete.sh` | `phase-*-agent` 完了を `flow.log` に記録し所要時間を算出。Phase 2 完了時は人間確認ゲートを念押し |
 | `PreToolUse` | `Bash` | `pr-merge-guard.sh` | `gh pr merge` を捕まえ、自動マージ条件を検証。`main`/`develop`/`release/*`/`hotfix/*` 向けは常に `deny`。`feature/*` 向けは CI 全通過・コンフリクトなし・DB 破壊的変更なし（`db-destructive-patterns.txt`）・`--merge` 方式のときだけ `allow` |
@@ -34,7 +34,15 @@
 
 ## 動作確認
 
-stdin に hook JSON を渡して単体で実行できます。
+スモークテストを用意しています。gh はスタブに差し替えるためネットワーク不要で、GNU（Linux）/ BSD（macOS）どちらの coreutils でも通ります。
+
+```bash
+bash tests/hooks/run.sh
+```
+
+hook を変更したら必ずこれを通してください。`stat` / `date` の方言差は `lib.sh` の `file_mtime` / `iso_to_epoch` に閉じ込めているので、新しい hook でもこれらを経由すること。
+
+stdin に hook JSON を渡して単体で実行することもできます。
 
 ```bash
 cd /path/to/project   # doc/process/state.json があるディレクトリ
