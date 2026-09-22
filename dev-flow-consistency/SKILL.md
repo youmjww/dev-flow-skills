@@ -2,7 +2,7 @@
 name: dev-flow-consistency
 description: AI駆動開発フローの consistency ステージ（3/6: 整合性チェック）。plan_repair（implementation 内の計画修正）も mini モードとして担当します。トレーサビリティID整合性とドキュメント間の矛盾を検出し、カバレッジ行列（REQ × TC × API）を生成、タスクを Infra/App/Cross + DAG `depends_on` に分類して設計を凍結します。`mode=incremental` 時は Impact Analysis で baseline_commit 以降の差分のみを抽出します。ドキュメント生成承認後、または `--from=consistency` 起動時に使用します。
 model: haiku
-allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
+allowed-tools: Read Write Edit Bash Agent SendMessage TaskStop AskUserQuestion
 disable-model-invocation: true
 ---
 

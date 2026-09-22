@@ -2,7 +2,7 @@
 name: dev-flow-implementation
 description: AI駆動開発フローの implementation ステージ（4/6: 並列実装）。タスクチェックリストの DAG `depends_on` を解決しながらグループを並列実行し、各グループ内で Dev/QA を独立 worktree で並列実装します。Infra/App/Cross の 3 種類のチーム構成に対応し、推論トレース・Plan Repair・独立レビュアー・Implements/Tests コミットフッターを伴います。整合性チェック完了後、または `--from=implementation` 起動時に使用します。
 model: haiku
-allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
+allowed-tools: Read Write Edit Bash Agent SendMessage TaskStop AskUserQuestion
 disable-model-invocation: true
 ---
 
@@ -195,6 +195,8 @@ worktree 作成後、state.json の `implementation_progress.active_worktrees` �
 
 Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implementer は **名前付きサブエージェント**として起動し、結果は最終回答（JSON）で受け取ります。並列起動するものは `run_in_background=true` で同一ターンに起動し、順次起動するものは `run_in_background=false` で 1 つずつ起動します。
 
+Dev/QA implementer は数十分単位で稼働するため、pane 型サブエージェントが起動後にツールを一切実行しないままハングする既知の問題の影響を受けやすい。STEP C の完了待機中にハングが疑われる場合は `~/.claude/skills/dev-flow/reference/agent-hang-recovery.md` の検知手順・fork フォールバック手順に従う。
+
 グループのチーム種別に応じて、以下のパターンでエージェントを起動します：
 
 **Infra グループ：Dev (Infra) + QA (Infra) を並列起動**
@@ -244,7 +246,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 ### STEP C: エージェントの完了待機
 
-グループのチーム種別に応じて、各エージェントの完了通知（最終回答の JSON）を待ちます。`sleep` ポーリングはしません：
+グループのチーム種別に応じて、各エージェントの完了通知（最終回答の JSON）を待ちます。`sleep` ポーリングはしません。ただし、タイムアウト目安（STEP 3.5 相当、モデル別に haiku=5分/sonnet=15分/opus=30分）を超えても完了通知が無い場合は、`~/.claude/skills/dev-flow/reference/agent-hang-recovery.md` の手順でハングかどうかを切り分け、該当すれば同ファイルの fork フォールバックで当該エージェントを再起動する：
 
 - **Infra**: `dev-implementer-infra-group-N` + `qa-implementer-infra-group-N` の両方
 - **App**: `dev-implementer-app-group-N` + `qa-implementer-app-group-N` の両方

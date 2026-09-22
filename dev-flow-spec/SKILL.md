@@ -2,7 +2,7 @@
 name: dev-flow-spec
 description: AI駆動開発フローの spec ステージ（2/6: 仕様書生成）。テスト定義書（Gherkin）・API仕様書（OpenAPI 3.1.0）・インフラ仕様書・UIモックを名前付きサブエージェントで並列生成し、frontmatter に `covers: [REQ-NNN]` を付与してエージェントレビューと人間レビューを得ます。要件定義承認後の `/dev-flow` 継続時、または `--from=spec` で起動時に使用します。
 model: haiku
-allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
+allowed-tools: Read Write Edit Bash Agent SendMessage TaskStop AskUserQuestion
 disable-model-invocation: true
 ---
 
