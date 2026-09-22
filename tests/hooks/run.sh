@@ -279,6 +279,33 @@ sed -i.bak 's/covers: \[REQ-004\]/covers: [REQ-099]/' "$dir/doc/test-spec/auth.m
 out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
 assert_eq "存在しない REQ を covers すると exit 2" "$(hook_rc)" "2"
 assert_contains "違反理由が stderr に出る" "$(hook_err)" "REQ-099 が doc/requirements/ に存在しません"
+assert_contains "違反行の行番号が付く" "$(hook_err)" "doc/test-spec/auth.md:1"
+assert_contains "直し方（→）が付く" "$(hook_err)" "→ doc/requirements/*.md の frontmatter にある ID"
+assert_contains "3 回で blocked の案内" "$(hook_err)" "3 回差し戻された場合は"
+cp "$SAMPLE/doc/test-spec/auth.md" "$dir/doc/test-spec/auth.md"
+
+# 書きかけ: frontmatter にあるが本文が未完成
+python3 - "$dir/doc/test-spec/auth.md" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1]); s = p.read_text(); p.write_text(s[:s.index('### TC-003')])
+PY
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "本文未完成（マーカー無し）は exit 2" "$(hook_rc)" "2"
+assert_contains "3 件以上ならマーカーのヒント" "$(hook_err)" "in-progress --> を置くと"
+printf '\n<!-- dev-flow: in-progress -->\n' >> "$dir/doc/test-spec/auth.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "書きかけマーカー付きなら exit 0" "$(hook_rc)" "0"
+assert_contains "マーカーの WARN が出る" "$(reason "$out")" "書きかけマーカー"
+all_out="$(python3 "$HOOKS/doc-validate.py" --project-dir "$dir" --all || true)"
+assert_contains "--all ではマーカーの残存が ERROR" "$all_out" "ERROR doc/test-spec/auth.md"
+assert_contains "  マーカーが理由" "$all_out" "書きかけマーカー <!-- dev-flow: in-progress --> が残っています"
+cp "$SAMPLE/doc/test-spec/auth.md" "$dir/doc/test-spec/auth.md"
+
+# 本文にあるが frontmatter に無い
+printf '\n### TC-099: 異常系: 迷子の見出し\n' >> "$dir/doc/test-spec/auth.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "本文にだけある ID は exit 2" "$(hook_rc)" "2"
+assert_contains "frontmatter への追加を促す" "$(hook_err)" "TC-099: 本文に見出しがあるが frontmatter にありません"
 cp "$SAMPLE/doc/test-spec/auth.md" "$dir/doc/test-spec/auth.md"
 
 # implemented_by の関数が無い
@@ -369,6 +396,60 @@ done
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
+# mark-group-done.sh
+# ---------------------------------------------------------------------------
+section "mark-group-done.sh"
+dir="$(new_project)"
+(cd "$dir" && git init -q && git config user.email t@example.com && git config user.name t)
+cat > "$dir/doc/process/task_checklist.md" <<'EOF'
+# タスクチェックリスト
+
+## ステージ進捗
+
+- [ ] 4. implementation: 並列実装
+
+### グループ 1 (App) — depends_on: []
+
+#### Dev タスク (App)
+- [ ] migration 作成
+- [x] 既に完了のタスク
+
+#### QA タスク (App)
+- [ ] TC-001 の Feature テスト
+
+### グループ 2 (App) — depends_on: [group-1]
+
+#### Dev タスク (App)
+- [ ] API 実装
+
+## 実装タスク（Devチーム）全一覧
+- [ ] migration 作成
+- [ ] API 実装
+
+## QAタスク（QAチーム）全一覧
+- [ ] TC-001 の Feature テスト
+EOF
+write_state "$dir" implementation '.implementation_progress = {total_groups: 2, completed_groups: [], active_worktrees: ["worktree-dev-app-group-1", "worktree-qa-app-group-1", "worktree-dev-app-group-2"], pr_numbers: {}}'
+(cd "$dir" && git add -A && git commit -qm init)
+out="$(cd "$dir" && CLAUDE_PROJECT_DIR="$dir" bash "$HOOKS/mark-group-done.sh" 1 12 13 2>&1)"; rc=$?
+assert_eq "正常終了" "$rc" "0"
+assert_contains "グループ 1 の Dev タスクが [x]" "$(sed -n '/### グループ 1/,/### グループ 2/p' "$dir/doc/process/task_checklist.md")" "- [x] migration 作成"
+assert_contains "グループ 1 の QA タスクが [x]" "$(cat "$dir/doc/process/task_checklist.md")" "- [x] TC-001 の Feature テスト"
+assert_contains "グループ 2 のタスクは [ ] のまま" "$(cat "$dir/doc/process/task_checklist.md")" "- [ ] API 実装"
+assert_eq "全一覧の同一タスクも [x]" "$(grep -c '^- \[x\] migration 作成' "$dir/doc/process/task_checklist.md")" "2"
+assert_eq "completed_groups に追加" "$(jq -c .implementation_progress.completed_groups "$dir/doc/process/state.json")" '["group-1"]'
+assert_eq "group-1 の worktree だけ除去" "$(jq -c .implementation_progress.active_worktrees "$dir/doc/process/state.json")" '["worktree-dev-app-group-2"]'
+assert_eq "pr_numbers に記録" "$(jq -c '.implementation_progress.pr_numbers["group-1"]' "$dir/doc/process/state.json")" '[12,13]'
+assert_contains "コミットされる" "$(cd "$dir" && git log --oneline -1)" "グループ 1 完了"
+assert_contains "flow.log に記録" "$(cat "$dir/doc/process/flow.log")" "event=group_done group=group-1"
+out="$(cd "$dir" && CLAUDE_PROJECT_DIR="$dir" bash "$HOOKS/mark-group-done.sh" 1 12 13 --no-commit 2>&1)"
+assert_eq "冪等（2 回目も成功、completed_groups は重複しない）" "$(jq -c .implementation_progress.completed_groups "$dir/doc/process/state.json")" '["group-1"]'
+out="$(cd "$dir" && CLAUDE_PROJECT_DIR="$dir" bash "$HOOKS/mark-group-done.sh" 9 --no-commit 2>&1)"; rc=$?
+assert_eq "存在しないグループは失敗" "$rc" "1"
+assert_contains "  理由を表示" "$out" "セクションが見つかりません"
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
 # agent-complete.sh
 # ---------------------------------------------------------------------------
 section "agent-complete.sh"
@@ -392,6 +473,13 @@ assert_contains "完了が flow.log に記録" "$(cat "$dir/doc/process/flow.log
 dur="$(grep -o 'duration_seconds=[0-9]*' "$dir/doc/process/flow.log" | cut -d= -f2)"
 [ -n "$dur" ] && [ "$dur" -ge 89 ] && [ "$dur" -le 95 ] && ok "所要時間が算出される（GNU/BSD date）" || fail "所要時間" "got: ${dur:-empty}"
 assert_contains "requirements 完了時は人間確認ゲートを念押し" "$(reason "$out")" "人間確認ゲート"
+
+# 起動直後（agent_start から数秒）の PostToolUse は「完了」ではなく「起動」として記録
+printf '%s event=agent_start agent=stage-spec-agent stage=spec model=haiku\n' "$ts" >> "$dir/doc/process/flow.log"
+out="$(run_hook agent-complete.sh "$dir" "$(agent_json stage-spec-agent)")"
+assert_contains "数秒以内の PostToolUse は agent_spawned として記録" "$(cat "$dir/doc/process/flow.log")" "event=agent_spawned agent=stage-spec-agent"
+assert_not_contains "agent_complete は記録しない" "$(grep stage-spec-agent "$dir/doc/process/flow.log")" "event=agent_complete"
+assert_contains "起動のみで完了ではない旨を通知" "$(reason "$out")" "実行はまだ完了していません"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
@@ -484,6 +572,14 @@ assert_eq "state.json の base_branch と不一致は deny" "$(decision "$out")"
 
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 999 --merge')")"
 assert_eq "存在しない PR は deny" "$(decision "$out")" "deny"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 113 --merge')")"
+assert_eq "テストファイル内の DROP TABLE / DELETE FROM 文字列は allow" "$(decision "$out")" "allow"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 114 --merge')")"
+assert_eq "マイグレーションの DROP TABLE は deny（テストファイルの同文字列は無視）" "$(decision "$out")" "deny"
+assert_contains "deny 理由にマイグレーション側の行" "$(reason "$out")" "legacy_tasks"
+assert_not_contains "deny 理由にテストファイル側の行は出ない" "$(reason "$out")" "'; DROP TABLE tasks"
 
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 109 --merge')")"
 assert_eq "テスト関数の削除は deny" "$(decision "$out")" "deny"

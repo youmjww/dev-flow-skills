@@ -536,9 +536,7 @@ deny メッセージの例と、それが「安全装置の正常動作」なの
    - Infra: `dev/infra-group-N`, `qa/infra-group-N`
    - App: `dev/app-group-N`, `qa/app-group-N`
    - Cross: 上記4ブランチすべて
-2. `doc/process/task_checklist.md` のグループNタスクを `[x]` に更新
-3. `doc/process/state.json` の `implementation_progress` を更新（`completed_groups`に追加、`active_worktrees`をリセット）
-4. 上記2ファイルを1コミットで記録
+2. `~/.claude/skills/dev-flow/hooks/mark-group-done.sh N <PR番号...>` を実行する（1 回の Bash で）。チェックリストのグループ N（全一覧セクションの同一タスクも）を `[x]` にし、`state.json` の `completed_groups` / `active_worktrees` / `pr_numbers` を更新して 1 コミットする。冪等なので再開時に再実行してよい。hook 未導入環境（スクリプトが無い）では同じ内容を手で行う：チェックリストの `[x]` 化 → `implementation_progress` の更新 → 2 ファイルを 1 コミット
 
 ---
 

@@ -33,8 +33,13 @@ REL="${ABS#"$PROJECT_DIR"/}"
 if [ "$RC" -eq 1 ]; then
   log_flow "event=doc_invalid file=$REL"
   {
-    echo "dev-flow hook: $REL がスキーマ違反です。以下を修正して書き直してください（frontmatter の ID・covers・implemented_by・本文見出しの対応を確認）。"
+    echo "dev-flow hook: $REL がスキーマ違反です。各行の「→」の直し方に従って修正し、同じファイルを書き直してください。"
     printf '%s\n' "$OUT" | grep -E '^(ERROR|WARN)' | sed 's/^/  /'
+    N_HEAD="$(printf '%s\n' "$OUT" | grep -c '本文に見出しがありません' || true)"
+    if [ "${N_HEAD:-0}" -ge 3 ]; then
+      echo "  ヒント: 本文が未完成の項目が ${N_HEAD} 件あります。文書を分割して書いている場合は、ファイル末尾に <!-- dev-flow: in-progress --> を置くと完成まで WARN 扱いになります（完成時に必ず削除。--all 検証ではマーカーの残存が ERROR）。"
+    fi
+    echo "  同じ違反で 3 回差し戻された場合は、書き直しを繰り返さず blocked として報告してください。"
   } >&2
   exit 2
 fi
