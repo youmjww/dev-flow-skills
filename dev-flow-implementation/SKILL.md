@@ -177,8 +177,29 @@ ensure_worktree() {
   else
     git worktree add "$path" -b "$branch"
   fi
+  seed_worktree "$path"
+}
+
+# gitignore されている依存物と .env を worktree に用意する。各 implementer / reviewer が
+# composer install / npm install / .env 作成をやり直す時間（実戦で 10 回以上）を省く。
+# node_modules はシンボリックリンクだと Vite / Vitest のパス解決で問題が出るためコピーする。
+seed_worktree() {
+  local wt="$1"
+  # サブプロジェクト（backend/ frontend/ 等）も含めて、メイン側にある依存ディレクトリを同じ相対パスへ
+  for dep in vendor node_modules .venv; do
+    find "$MAIN_DIR" -maxdepth 3 -type d -name "$dep" -not -path "*/$dep/*" 2>/dev/null | while read -r src; do
+      rel="${src#"$MAIN_DIR"/}"
+      [ -e "$wt/$rel" ] || { mkdir -p "$(dirname "$wt/$rel")"; cp -R "$src" "$wt/$rel"; }
+    done
+  done
+  # .env は .env.example から生成（メインの .env に秘密が入っている可能性があるのでコピーしない）
+  find "$wt" -maxdepth 3 -name ".env.example" -not -path "*/node_modules/*" -not -path "*/vendor/*" 2>/dev/null | while read -r ex; do
+    [ -e "${ex%.example}" ] || cp "$ex" "${ex%.example}"
+  done
 }
 ```
+
+`seed_worktree` はメインに依存物が無ければ何もしない（最初の基盤グループでは implementer 自身が `install` する）。Laravel の `APP_KEY` など `.env` 生成後に初期化が要るものは implementer が `php artisan key:generate` 等で行う（`doc/process/environment.md` に書いておく）。
 
 | チーム種別 | 作成する worktree |
 |---|---|
@@ -283,30 +304,7 @@ JSON パース失敗時のフォールバックは reference 参照。
 
 Dev と QA は別 worktree で並行して作業しており、**QA は Dev の実装を見ずにインターフェースを推測してテストを書いている**。そのため、両者を合わせて初めて分かる不一致が高確率で発生する（実例: aria-label の命名違い、React Testing Library の `cleanup` 未登録によるテスト間の DOM 残留、エラーメッセージの句点有無、Dev/QA 双方が同名テストファイルを作成してのコンフリクト）。レビュアーに渡す前に、オーケストレーターが機械的に統合して実テストを回す。
 
-**手順（グループごと、Dev/QA 両方の implementer が `completed` を返した後）:**
-
-1. QA worktree に Dev ブランチを**検証用に**マージする（QA 側で行う。Dev 側には QA を混ぜない）：
-   ```bash
-   cd {MAIN_DIR}/../worktree-qa-{team}-group-N
-   git merge dev/{team}-group-N -m "merge: 検証用（後で取り消す）"
-   ```
-   - **コンフリクトした場合**: 同じパスのファイルを Dev/QA 双方が作っている。テストファイルなら QA 側を正とし、Dev implementer に「そのファイルを `git rm` して再コミット」を `SendMessage` で依頼する。実装ファイルなら QA 側の変更を取り消す
-2. QA worktree で **Dev のユニットテストと QA の仕様テストの両方**・lint・型検査を**実際に実行**する（`tech_stack` の標準コマンド。依存物が無ければ `composer install` / `npm install` 等を先に行う）。あわせて規約の「標準コマンド（分岐カバレッジ）」で統合カバレッジを計測し、参考値として STEP E の PR 説明に書く（ゲートは Dev の `result.coverage` で既に掛かっているので、ここでは記録のみ）
-3. 結果で分岐：
-   | 結果 | 対応 |
-   |---|---|
-   | 全パス | 4 へ |
-   | テストコード側の不備（セットアップ漏れ・文言のタイプミス・セレクタの推測違い等） | QA implementer に `SendMessage` で修正を依頼する（軽微で明白なら オーケストレーターが直接直してもよい）。直った後 1 からやり直す |
-   | 実装側の不備（QA の期待がテスト定義書どおりで、実装がそれに従っていない） | Dev implementer に `SendMessage` で修正を依頼する。直った後 1 からやり直す |
-   | テスト定義書自体の矛盾 | STEP G の `doc_issues` として扱い、人間に判断を仰ぐ |
-4. 検証用マージを**必ず取り消す**（PR の diff に Dev の変更が混ざらないようにする）：
-   ```bash
-   git reset --hard {マージ前の QA コミット}
-   ```
-   取り消し前に QA 側で修正コミットを積んだ場合は、`git stash` → `reset --hard` → `stash pop` → 再コミットで修正だけを残す
-5. 統合で全パスした事実（Dev ユニットテスト件数 + QA 仕様テスト件数、統合カバレッジ）を STEP E の PR 説明に書く
-
-この STEP を飛ばすと、レビュアーが「QA テストは Dev 実装に対して通るか」を自前で検証することになり時間が掛かるうえ、PR マージ後の test ステージで初めて失敗が露見する。
+手順（QA worktree に Dev ブランチを検証用マージ → Dev ユニット + QA 仕様テスト・lint・型検査を実行 → 不備は該当 implementer に差し戻し → 検証マージを `reset --hard` で取り消し → 統合結果を PR 説明に書く）は [reference/integration-check.md](reference/integration-check.md) を Read して従う。
 
 ---
 
@@ -323,47 +321,7 @@ Dev と QA は別 worktree で並行して作業しており、**QA は Dev の�
 
 Agent を起動（同期実行、`run_in_background=false`, `model="opus"`）。現行の Agent ツールにはツール制限パラメータが無いため、プロンプト冒頭に「**ファイルの編集・作成は禁止。Read / Grep / Bash（読み取り系）のみで確認し、指摘は最終回答で返す**」を必ず含める：
 
-```
-あなたは Infra Dev チームの**懐疑的レビュアー（Skeptical Reviewer）**です。
-Dev エージェントとは意図的に異なる観点でレビューします。
-
-対象 worktree: {MAIN_DIR}/../worktree-dev-infra-group-N
-要件定義書: {REQUIREMENTS_PATHS}
-インフラ仕様書: {INFRA_SPEC_PATH}
-技術スタック: {tech_stack}
-
-【権限制限】このエージェントは読み取り専用です。Edit/Write/NotebookEdit ツールは使用できません。
-git diff や git log などの読み取り系 Bash コマンドは使用可能です。
-
-**レビュー観点（Dev とは異なる独立した観点で確認）:**
-- **悪意のあるユーザー視点**: セキュリティホール・権限昇格・インジェクション
-- **新人視点**: コードを読んで意図が理解できるか、命名が適切か
-- **アーキテクチャ視点**: 拡張性・将来の保守コスト・依存関係
-
-**規約チェックリスト（照合必須）:**
-{REVIEW_CHECKLIST}
-（言語・フレームワーク・プロジェクト規約のルール ID・重大度・確認方法。「確認方法」の grep は実際に実行して確認する）
-
-**テストへの要求（Dev レビューで見る）:** この実装で増えた・変わった `if` / `switch` / 早期 return / `catch` / 三項演算子を列挙し、それぞれを通る**ユニットテストが Dev worktree にある**か確認する（`test/branch-coverage`。置き場は `testing.md` の「Dev と QA のテスト分担」）。無ければ `changes_requested` にして `fix` に「ユニットテスト追加: {関数}: {分岐の条件}」と書く。**Dev implementer に回る**（QA には回さない。QA は実装の分岐を知らない）。あわせて Dev が仕様テスト（`tests/Feature/**` / `src/App.test.tsx` / `e2e/**` 等、TC-ID 付き）を書いていないか確認し、書いていれば `test/unit-vs-spec-split` として差し戻す（QA と同じパスにファイルが生まれてコンフリクトする）。出力の**形式**（日時フォーマット・レスポンスのラップ・エラーメッセージ文言）が仕様書どおりかのユニットテストがあるかも見る（実戦で日時が UTC で返るバグを Feature テストが見逃した事例あり）
-
-**出力（最終回答。SendMessage は使わない）:**
-
-blocker / major は**見つけたものをすべて**挙げる。minor は最大 3 件まで（記録用。修正は求めない）。上の 3 観点で見つけた規約外の問題も、該当ルールが無ければ `rule: "review/<短い名前>"` で報告する。
-
-```json
-{
-  "reviewer": "dev-infra-group-N",
-  "status": "approved | changes_requested",
-  "findings": [
-    {"severity": "blocker", "rule": "go/sql-injection", "file": "internal/repo/user.go", "line": 42, "problem": "WHERE 句を Sprintf で組み立てている", "fix": "プレースホルダ $1 と引数渡しに変える"},
-    {"severity": "minor", "rule": "go/naming", "file": "internal/repo/user.go", "line": 10, "problem": "レシーバ名が r と repo で混在", "fix": "r に統一"}
-  ],
-  "checked_rules": ["go/sql-injection", "go/errors-wrap", "..."]
-}
-```
-
-`status` は blocker または major が 1 件でもあれば `changes_requested`、それ以外は `approved`。
-```
+`prompts/reviewer-dev.md` を Read し、プレースホルダー（worktree パス・仕様書パス・`{tech_stack}`・`{REVIEW_CHECKLIST}`・Infra / App の別）を置換して渡す。プロンプトには「読み取り専用」「3 観点」「実行検証（3 条件）」「規約チェックリストの照合」「分岐→ユニットテストの要求」「JSON 出力フォーマット」が含まれる。
 
 `changes_requested` → `findings` のうち blocker / major を dev-implementer-infra-group-N に `SendMessage` で渡して修正（最大5回）。minor は memory 蓄積用に記録するだけで修正ループに回さない。レビュアーは初回から Opus を使用するため、追加昇格は行わない。同じ `rule` が 3 回以上出たら [reference/agent-prompt-injection.md](reference/agent-prompt-injection.md) の手順で memory に保存する。
 
@@ -471,60 +429,7 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 - `disabled` → `gh pr merge` を発行せず、PR URL を人間に提示して stage-implementation-agent を終了する（マージ後に `/dev-flow` で再入）
 - `enabled` → グループの各 PR に対して 1 コマンドずつ `gh pr merge <N> --merge --delete-branch` を実行する。hook `pr-merge-guard.sh` が自動マージ条件（ベースが `feature/*` かつ `base_branch` と一致・CI 全通過・コンフリクトなし・DB 破壊的変更なし）を検証し、満たさなければ deny される
 
-**マージの順序と QA PR の扱い（Dev/QA が別 PR のグループ）:**
-
-QA ブランチ単体には Dev の実装が含まれないため、**QA PR の CI は Dev PR がマージされるまで必ず失敗する**（テスト対象のエンドポイント・コンポーネントが存在せず 404 / 要素未検出になる）。したがって：
-
-1. まず **Dev PR** をマージする
-2. Dev PR のマージ後、QA PR のブランチにベースブランチの最新を取り込んで CI を再実行させる：
-   ```bash
-   gh api -X PUT repos/{owner}/{repo}/pulls/<QA PR 番号>/update-branch
-   ```
-   （ローカルで `git merge` して push でもよいが、worktree は STEP F で削除済みなので API 経由が手軽）
-3. QA PR の CI が通過してから QA PR をマージする
-
-QA PR の CI 失敗を「実装の不備」と誤解して調査に時間を使わないこと。
-
-**`mergeable=UNKNOWN` で deny された場合:** 直前に別の PR をマージした直後は GitHub 側がマージ可否を再計算中で、数秒〜十数秒 `UNKNOWN` になる。`gh pr view <N> --json mergeable,mergeStateStatus` で `MERGEABLE` / `CLEAN` になるのを確認してから再試行する（`sleep` ではなく確認コマンドで待つ）。実際にコンフリクトしている場合は `CONFLICTING` になるので区別できる。
-
-**複数コマンドをまとめない:** `gh pr merge` は 1 回の Bash 呼び出しで 1 PR だけ実行する。`&&` や `;` で他コマンドと連結すると hook が PR 番号を解析できず「番号で明示してください」と deny される。
-
-結果の扱い：
-
-| 結果 | 動作 |
-|---|---|
-| グループの全 PR がマージされた | STEP H へ |
-| 一部または全部が deny された | deny 理由を記録し、そのグループを「人間マージ待ち」とする。依存の無い他グループがあれば続行、無ければ人間に「以下の PR は自動マージ条件を満たしません。レビュー・マージ後に `/dev-flow` を実行してください」と PR URL・理由を提示して**終了** |
-| CI が `PENDING` で deny された | 待たずに上記と同じ扱い（次回 `/dev-flow` の再開処理が再試行する） |
-| `disabled`（hook 未導入） | 人間に提示するのみで終了（下記の理由明記は不要。hook が無いこと自体が理由なので繰り返さない） |
-
-deny を回避する目的で `--admin` / `--auto` / `--squash` を試したり、条件を満たすようにファイルを削って再 push したりしてはならない。
-
-**マージがブロックされた理由を PR 自体に明記する（`enabled` で deny された場合）:**
-
-チャットでの報告だけでなく、`gh pr comment <N> --body "..."` で PR に直接コメントを残す（本文を書き換えると元の実装内容の記録が失われるため、コメント追加を使う）。人間が PR 一覧を見ただけで「なぜ自動マージされず自分の対応が必要なのか」が分かるようにする：
-
-```bash
-gh pr comment <N> --body "$(cat <<'EOF'
-⚠️ 自動マージ条件を満たさなかったため、人間によるレビュー・マージが必要です。
-
-**理由**: {hook から返された deny メッセージをそのまま引用、または要約}
-
-**対応**: 上記を確認し、問題なければ GitHub 上で直接マージしてください（このセッションの \`gh pr merge\` は同じ理由で再度ブロックされます）。
-EOF
-)"
-```
-
-deny メッセージの例と、それが「安全装置の正常動作」なのか「実際に直すべき問題」なのかの見分け方：
-
-| deny 理由の例 | 典型的な意味 | 人間への伝え方 |
-|---|---|---|
-| CI チェックが無い / 未通過 | CI 未設定、またはテスト失敗 | CI が無ければ整備を提案（`reference/`に手順があれば従う）、失敗ならテスト内容を確認 |
-| ベースブランチが `feature/*` 以外 | `main` 等への直接マージは常に人間判断が必要という設計 | 「このプロジェクトのルールで意図的にブロックされています」と伝える |
-| DB 破壊的変更のパターンに一致 | 実際に破壊的、または文字列パターンの誤検知（テストデータの `DROP TABLE` 等） | diff を確認し、誤検知なら「テストコード内の文字列で実際の破壊的変更ではありません」と理由を添えて伝える |
-| コンフリクトあり（`mergeable != MERGEABLE`） | ベースブランチが進んだ | 解消してから再試行、または人間に委ねる |
-
-理由が「hook の誤検知」だと判断できる場合でも、hook 自体を回避する操作はしない（上記の deny 回避禁止規定のとおり）。誤検知の根拠を人間に提示し、判断は人間に委ねる。
+**マージ運用の詳細**（Dev → QA の順序と `update-branch`、`mergeable=UNKNOWN` の待ち方、コマンドを連結しない、deny 理由の分類表と PR コメントでの明記）は [reference/merge-ops.md](reference/merge-ops.md) を Read して従う。
 
 ---
 
@@ -536,7 +441,9 @@ deny メッセージの例と、それが「安全装置の正常動作」なの
    - Infra: `dev/infra-group-N`, `qa/infra-group-N`
    - App: `dev/app-group-N`, `qa/app-group-N`
    - Cross: 上記4ブランチすべて
-2. `~/.claude/skills/dev-flow/hooks/mark-group-done.sh N <PR番号...>` を実行する（1 回の Bash で）。チェックリストのグループ N（全一覧セクションの同一タスクも）を `[x]` にし、`state.json` の `completed_groups` / `active_worktrees` / `pr_numbers` を更新して 1 コミットする。冪等なので再開時に再実行してよい。hook 未導入環境（スクリプトが無い）では同じ内容を手で行う：チェックリストの `[x]` 化 → `implementation_progress` の更新 → 2 ファイルを 1 コミット
+1.5. **実バージョンの確認（基盤グループのみ）**: 「実バージョンの書き戻し」タスクを含むグループなら、マージ後の `state.json.tech_stack.language_version` / `framework_version` が lock ファイルと一致しているか `jq` で確認する。タスクが書き戻していなければオーケストレーターが lock から読んで `state.json` だけ更新する（要件定義書は人間確認が要るので、compliance の乖離として残す）
+2. **レビュー findings の集約**: このグループの全レビュー（Dev / QA）の `findings` のうち、`rule` が `review/*`（規約ファイルに無かった指摘）で、かつプロジェクト固有でない汎用的なもの（例: `role="button"` の Space キー未対応、`aria-live` の常時マウント、`onClick={async}` の floating promise、`{n && <X />}` の 0 描画）を `doc/process/review-findings-backlog.md` に追記する（`| グループ | rule | severity | 内容 | 該当ファイル | 昇格先候補（react.md / laravel.md / testing.md 等） |` の表。同じ内容が既にあれば行を足さず「回数」列を増やす）。memory 保存の条件（同一 rule 3 回）に届かない minor / major の指摘が次のプロジェクトで消えないようにするため。compliance の完了レポートで「規約ファイルへの昇格候補」として人間に提示する
+3. `~/.claude/skills/dev-flow/hooks/mark-group-done.sh N <PR番号...>` を実行する（1 回の Bash で）。チェックリストのグループ N（全一覧セクションの同一タスクも）を `[x]` にし、`state.json` の `completed_groups` / `active_worktrees` / `pr_numbers` を更新して 1 コミットする。冪等なので再開時に再実行してよい。hook 未導入環境（スクリプトが無い）では同じ内容を手で行う：チェックリストの `[x]` 化 → `implementation_progress` の更新 → 2 ファイルを 1 コミット
 
 ---
 
