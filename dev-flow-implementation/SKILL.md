@@ -258,7 +258,7 @@ Dev/QA implementer は数十分単位で稼働するため、pane 型サブエ�
 
 | status | blocker_type | 対応 |
 |---|---|---|
-| `"completed"` | — | `result.lint.exit_code` が **0 以外、または欠損**なら「lint / format / 型検査が通っていない」として同じ implementer を `SendMessage` で再開して解消させる（最大 2 回、それでも通らなければ `failed` 扱い）。QA implementer は加えて `result.coverage.changed_functions_below_threshold` が**空でなければ**「未到達分岐の TC をテスト定義書に追加して実装する」よう再開させる（最大 2 回。テストを減らす方向の修正は却下）。両方通ったら `result.commits` をログに記録して次の処理へ進む |
+| `"completed"` | — | `result.lint.exit_code` が **0 以外、または欠損**なら「lint / format / 型検査が通っていない」として同じ implementer を `SendMessage` で再開して解消させる（最大 2 回、それでも通らなければ `failed` 扱い）。**Dev implementer** は加えて `result.unit_tests.failed` が 0 でない、または `result.coverage.changed_functions_below_threshold` が**空でなければ**「ユニットテストを直す / 未到達分岐のユニットテストを追加する」よう再開させる（最大 2 回。テストを減らす方向の修正は却下）。**QA implementer** の `result.tests.failed` は Dev 実装が無い worktree では非 0 が正常なので、`note` に「Dev 実装待ち」以外の原因（構文エラー・セットアップ不備）が書かれている場合だけ再開させる。通ったら `result.commits` をログに記録して次の処理へ進む |
 | `"blocked"` | `"plan_repair_needed"` | **Plan Repair フローへ移行**（下記参照） |
 | `"blocked"` | その他 | AskUserQuestion で人間に判断を仰ぐ |
 | `"failed"` | — | AskUserQuestion で人間に報告し指示を仰ぐ |
@@ -273,6 +273,37 @@ Dev/QA implementer は数十分単位で稼働するため、pane 型サブエ�
 - 修正履歴は `doc/process/plan_repair_log.md` に追記
 
 JSON パース失敗時のフォールバックは reference 参照。
+
+---
+
+### STEP C.5: Dev + QA 統合検証（レビュー前に必ず実施）
+
+Dev と QA は別 worktree で並行して作業しており、**QA は Dev の実装を見ずにインターフェースを推測してテストを書いている**。そのため、両者を合わせて初めて分かる不一致が高確率で発生する（実例: aria-label の命名違い、React Testing Library の `cleanup` 未登録によるテスト間の DOM 残留、エラーメッセージの句点有無、Dev/QA 双方が同名テストファイルを作成してのコンフリクト）。レビュアーに渡す前に、オーケストレーターが機械的に統合して実テストを回す。
+
+**手順（グループごと、Dev/QA 両方の implementer が `completed` を返した後）:**
+
+1. QA worktree に Dev ブランチを**検証用に**マージする（QA 側で行う。Dev 側には QA を混ぜない）：
+   ```bash
+   cd {MAIN_DIR}/../worktree-qa-{team}-group-N
+   git merge dev/{team}-group-N -m "merge: 検証用（後で取り消す）"
+   ```
+   - **コンフリクトした場合**: 同じパスのファイルを Dev/QA 双方が作っている。テストファイルなら QA 側を正とし、Dev implementer に「そのファイルを `git rm` して再コミット」を `SendMessage` で依頼する。実装ファイルなら QA 側の変更を取り消す
+2. QA worktree で **Dev のユニットテストと QA の仕様テストの両方**・lint・型検査を**実際に実行**する（`tech_stack` の標準コマンド。依存物が無ければ `composer install` / `npm install` 等を先に行う）。あわせて規約の「標準コマンド（分岐カバレッジ）」で統合カバレッジを計測し、参考値として STEP E の PR 説明に書く（ゲートは Dev の `result.coverage` で既に掛かっているので、ここでは記録のみ）
+3. 結果で分岐：
+   | 結果 | 対応 |
+   |---|---|
+   | 全パス | 4 へ |
+   | テストコード側の不備（セットアップ漏れ・文言のタイプミス・セレクタの推測違い等） | QA implementer に `SendMessage` で修正を依頼する（軽微で明白なら オーケストレーターが直接直してもよい）。直った後 1 からやり直す |
+   | 実装側の不備（QA の期待がテスト定義書どおりで、実装がそれに従っていない） | Dev implementer に `SendMessage` で修正を依頼する。直った後 1 からやり直す |
+   | テスト定義書自体の矛盾 | STEP G の `doc_issues` として扱い、人間に判断を仰ぐ |
+4. 検証用マージを**必ず取り消す**（PR の diff に Dev の変更が混ざらないようにする）：
+   ```bash
+   git reset --hard {マージ前の QA コミット}
+   ```
+   取り消し前に QA 側で修正コミットを積んだ場合は、`git stash` → `reset --hard` → `stash pop` → 再コミットで修正だけを残す
+5. 統合で全パスした事実（Dev ユニットテスト件数 + QA 仕様テスト件数、統合カバレッジ）を STEP E の PR 説明に書く
+
+この STEP を飛ばすと、レビュアーが「QA テストは Dev 実装に対して通るか」を自前で検証することになり時間が掛かるうえ、PR マージ後の test ステージで初めて失敗が露見する。
 
 ---
 
@@ -310,7 +341,7 @@ git diff や git log などの読み取り系 Bash コマンドは使用可能�
 {REVIEW_CHECKLIST}
 （言語・フレームワーク・プロジェクト規約のルール ID・重大度・確認方法。「確認方法」の grep は実際に実行して確認する）
 
-**テストへの要求（Dev レビューでも見る）:** この実装で増えた・変わった `if` / `switch` / 早期 return / `catch` を列挙し、それぞれに対応する TC がテスト定義書と QA worktree のテストにあるか確認する（`test/branch-coverage`）。無ければ `changes_requested` にして `fix` に「TC-NNN を追加: {分岐の条件}」と書く。QA implementer に回る
+**テストへの要求（Dev レビューで見る）:** この実装で増えた・変わった `if` / `switch` / 早期 return / `catch` / 三項演算子を列挙し、それぞれを通る**ユニットテストが Dev worktree にある**か確認する（`test/branch-coverage`。置き場は `testing.md` の「Dev と QA のテスト分担」）。無ければ `changes_requested` にして `fix` に「ユニットテスト追加: {関数}: {分岐の条件}」と書く。**Dev implementer に回る**（QA には回さない。QA は実装の分岐を知らない）。あわせて Dev が仕様テスト（`tests/Feature/**` / `src/App.test.tsx` / `e2e/**` 等、TC-ID 付き）を書いていないか確認し、書いていれば `test/unit-vs-spec-split` として差し戻す（QA と同じパスにファイルが生まれてコンフリクトする）。出力の**形式**（日時フォーマット・レスポンスのラップ・エラーメッセージ文言）が仕様書どおりかのユニットテストがあるかも見る（実戦で日時が UTC で返るバグを Feature テストが見逃した事例あり）
 
 **出力（最終回答。SendMessage は使わない）:**
 
@@ -341,7 +372,7 @@ blocker / major は**見つけたものをすべて**挙げる。minor は最大
 #### QA (Infra) レビュー（Infra / Cross グループ）
 
 Infra QA のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記）。
-QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。`{REVIEW_CHECKLIST}` のうち `test/*`（[conventions/testing.md](reference/conventions/testing.md)）と各言語のテスト関連ルール（`*/table-driven` `*/parametrize` `*/test-*` 等）を照合する。特に `test/no-delete` / `test/no-skip` / `test/expected-from-impl` は blocker。`git diff` で削除行を確認し、`result.coverage` の未到達分岐と実装の分岐を突き合わせる。出力は Dev レビューと同じ JSON。`changes_requested` → qa-implementer-infra-group-N に渡して修正（最大5回）。
+QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。`{REVIEW_CHECKLIST}` のうち `test/*`（[conventions/testing.md](reference/conventions/testing.md)）と各言語のテスト関連ルール（`*/table-driven` `*/parametrize` `*/test-*` 等）を照合する。特に `test/no-delete` / `test/no-skip` / `test/expected-from-impl` は blocker。`git diff` で削除行を確認する。**TC 網羅**（`test/tc-coverage`）: テスト定義書 frontmatter の `test_cases[].id` と QA worktree のテストの TC-ID を突き合わせ、欠けが無いか見る。**置き場**（`test/unit-vs-spec-split`）: QA が実装の内部関数を直接呼ぶユニットテストや `tests/Unit/**` を書いていないか見る（Dev の担当。同じパスでコンフリクトする）。実装の分岐網羅は Dev reviewer の担当なので見なくてよい。出力は Dev レビューと同じ JSON。`changes_requested` → qa-implementer-infra-group-N に渡して修正（最大5回）。
 
 #### QA (App) レビュー（App / Cross グループ）
 

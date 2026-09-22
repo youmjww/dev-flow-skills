@@ -1,13 +1,42 @@
 # テストコード（言語横断）
 
-言語に関係なく**常に**注入する。言語別ファイル（`go.md` 等）の「テスト」節はこのファイルの上に読む。QA implementer / QA reviewer が主な対象だが、`test/branch-coverage` は Dev reviewer にも渡す（実装側が増やした分岐に TC を要求するため）。
+言語に関係なく**常に**注入する。言語別ファイル（`go.md` 等）の「テスト」節はこのファイルの上に読む。Dev implementer / QA implementer / 両 reviewer に渡す。
 
-## 書き方（QA implementer 向け）
+## Dev と QA のテスト分担
+
+Dev と QA は別 worktree で並行して書く。**同じ種類のテストを両方が書くと同じパスのファイルが二重に生まれる**ので、種類とファイルの置き場で分ける：
+
+| | Dev implementer が書く | QA implementer が書く |
+|---|---|---|
+| 種類 | **ユニットテスト**（ホワイトボックス） | **仕様テスト**（ブラックボックス） |
+| 対象 | 自分が書いたクラス・関数・コンポーネント単体。Form Request / Resource / サービス / フック / 純粋関数 | テスト定義書の TC-NNN。エンドポイント（HTTP 経由）・画面（App 全体をレンダリング）・E2E |
+| 網羅の基準 | **分岐網羅**（`if` / `switch` / 早期 return / `catch` / 三項演算子ごとに 1 ケース、境界値含む） | **TC 網羅**（テスト定義書の全 TC を 1 つずつ。TC-ID をテスト名かコメントに書く） |
+| 実装を見るか | 見る（自分が書いた） | 見ない（テスト定義書だけから書く。Dev 実装は別 worktree で並行中） |
+| 置き場（例） | Laravel: `tests/Unit/**`。React: `src/components/X.test.tsx` `src/api/x.test.ts`（実装と同じディレクトリ・同じ基底名）。Go: `pkg/x/x_test.go`。Python: `tests/unit/` | Laravel: `tests/Feature/**`。React: `src/App.test.tsx`（結合）。E2E: `e2e/**`。Go: `tests/integration/` `*_integration_test.go`。Python: `tests/feature/` `tests/e2e/` |
+| モック | 境界（HTTP・DB・時計）だけ。同一モジュール内はモックしない | 外部境界だけ（fetch・DB は実物か fake）。**実装の内部関数はそもそも知らないので触れない** |
+| 完了 JSON の `result.coverage` | 変更した関数の**分岐カバレッジ**を書く（閾値ゲートの対象） | 書かなくてよい（実装が無い worktree では測れない。統合検証で測る） |
+
+境界の判断に迷ったら「テスト定義書に TC-ID があるか」で決める。TC-ID があるものは QA、無い（実装の都合で生まれた分岐）ものは Dev。Dev が「この分岐は仕様レベルで TC があるべき」と思ったら、完了 JSON の `uncertainty_points` に「TC 不足: {関数}: {分岐条件}」と書き、QA がテスト定義書に TC を足す（`status: added`）。
+
+この分担にした理由（実戦での事例）: QA は実装を見ずに書くため、`TaskResource` が日時を UTC で返すバグ（`+09:00` で返す仕様）を Feature テストでは検出できず、レビュアーが手動で見つけた。Dev が Resource のユニットテストを書いていれば自分で気付けた。逆に Dev が「動作確認のため」に Feature テストまで書いたところ、QA と同じパス（`tests/Feature/TaskApiTest.php`）にファイルが生まれてマージ時にコンフリクトした。
+
+## 書き方（Dev implementer 向け: ユニットテスト）
+
+- 自分が書いた・変更した**関数・クラス・コンポーネントごと**にテストファイルを対で置く（上の表の置き場）
+- 分岐ごとに 1 ケース。`if` / `switch` / 早期 `return` / `catch` / 三項演算子 / `??` / オプショナルチェーンの分岐を数え、それぞれを通る入力を用意する。境界値（0・1・上限・上限+1・空・null・空白のみ）は分岐の一種
+- 例外・エラーの**種類**まで検証する（`ValidationException` が投げられる、`NotFoundError` のインスタンスである、HTTP 422 のレスポンスである）
+- 出力の**形式**まで検証する（日時が `+09:00` 付き ISO 8601 か、`{ data: {...} }` でラップされているか）。仕様書に形式の記述があるものは特に
+- フレームワークの機能（Form Request のバリデーション、Resource のシリアライズ、React のレンダリング）は実物で動かす。フレームワーク自体をモックしない
+- 期待値はリテラルで書く。実装と同じ計算式で期待値を作らない
+- テスト名は「条件 → 期待結果」（`it('returns 422 when title is whitespace only')`、`test('空白のみのタイトルはトリム後に required で 422 になる')`）
+- 完了 JSON の `result.coverage.changed_functions_below_threshold` に、閾値（`doc/conventions.md` の `coverage_threshold`、既定 0.80）未満の関数を列挙する。空でなければレビューに進めない
+
+## 書き方（QA implementer 向け: 仕様テスト）
 
 ### 何をテストするか
 - **テスト定義書の TC を 1 つずつ実装する**。TC-ID をテスト名またはコメントに書く（`// TC-003`）。compliance がこれで対応を検証する
 - **正常系だけで終わらない**。公開関数・エンドポイントごとに、少なくとも 1 つの異常系（不正入力・権限なし・存在しないリソース・依存先の失敗）を書く。テスト定義書に異常系の TC が無ければ、**テストを省略せずテスト定義書に TC を追加する**（`status: added`）
-- **分岐ごとに 1 ケース**。実装コードの `if` / `switch` / 早期 `return` / `catch` / 三項演算子を数え、それぞれを通るケースがあるか確認する。分岐に対応する TC が無ければ追加する。境界値（0・1・上限・上限+1・空・null）は分岐の一種として扱う
+- **仕様の分岐ごとに 1 ケース**。テスト定義書・要件定義書・API 仕様書に書かれた条件（バリデーションルール、ステータスコードの分かれ目、表示の切り替え条件）を数え、それぞれを通る TC があるか確認する。境界値（0・1・上限・上限+1・空・null）は仕様の分岐として扱う。**実装コードの `if` を数える必要はない**（それは Dev のユニットテストの責務。QA worktree に実装は無い）。Dev から `uncertainty_points` で「TC 不足」の申告があれば、その分岐を TC としてテスト定義書に追加（`status: added`）してから実装する
 - 例外・エラーの**種類**まで検証する（「エラーになる」ではなく「`ErrNotFound` / HTTP 404 / `ValidationError` になる」）
 - 副作用を検証する（DB に行が入った・メールが送られた・イベントが発火した）。戻り値だけ見て終わらない
 
@@ -26,7 +55,9 @@
 - `assert true` / assert の無いテスト / `try { ... } catch {}` で例外を握りつぶすテストを書かない
 - `sleep` でタイミングを合わせない。非同期は完了を待つ仕組み（`waitFor` / channel / `Eventually`）で
 
-## レビューチェックリスト（QA reviewer 向け。`test/branch-coverage` は Dev reviewer も）
+## レビューチェックリスト（Dev reviewer と QA reviewer で分担。「担当」列を見る）
+
+担当の凡例: **Dev** = Dev worktree のユニットテストを Dev reviewer が見る / **QA** = QA worktree の仕様テストを QA reviewer が見る / **両方** = それぞれの worktree で各 reviewer が見る。
 
 「機械」列が **hook** のものは `test-lint.py`（Write / Edit 時）または `pr-merge-guard.sh`（PR マージ時）が機械的に判定する。reviewer はその結果（`flow.log` の `test_lint_failed`、hook の WARN）を前提にし、**判断が要るルール**に時間を使う。
 
@@ -36,7 +67,9 @@
 | `test/no-skip` | blocker | hook（Write 時・PR 時） | スキップ・無効化が追加されていない | hook が exit 2 / deny 済み |
 | `test/expected-from-impl` | blocker | — | 期待値が実装の出力を貼ったものでない（テスト定義書の値と一致） | テスト定義書の「具体的な入出力値」と突き合わせ |
 | `test/error-cases` | major | — | 変更した公開関数・エンドポイントごとに異常系が 1 つ以上ある | 関数ごとに正常系 / 異常系のテスト数を数える |
-| `test/branch-coverage` | major | — | 変更した関数の `if` / `switch` / 早期 return / `catch` それぞれを通るケースがある | 分岐を列挙して対応テストを探す。`result.coverage` の未到達分岐 |
+| `test/branch-coverage` | major | — | **Dev**: 変更した関数の `if` / `switch` / 早期 return / `catch` それぞれを通るユニットテストがある | Dev reviewer が実装の分岐を列挙して Dev worktree のユニットテストと突き合わせる。`result.coverage` の未到達分岐。無ければ `fix` に「ユニットテスト追加: {関数}: {分岐条件}」と書いて Dev implementer に差し戻す（QA には回さない） |
+| `test/tc-coverage` | major | — | **QA**: テスト定義書の TC が仕様テストとして 1 つずつ実装されている（TC-ID で対応が取れる） | QA reviewer が frontmatter の `test_cases[].id` と QA worktree のテストの TC-ID を突き合わせる。欠けていれば QA implementer に差し戻す |
+| `test/unit-vs-spec-split` | major | — | **両方**: Dev がテスト定義書の TC-ID 付き仕様テスト（Feature / App 結合 / E2E）を書いていない。QA が実装の内部関数をモック・直接呼び出ししていない | 置き場の表（「Dev と QA のテスト分担」）と照合。Dev の `tests/Feature/` 追加や QA の `tests/Unit/` 追加は差し戻す（両 worktree に同じパスのファイルが生まれてコンフリクトする） |
 | `test/assert-present` | major | hook（Write 時、error） | すべてのテストに意味のある assert がある | hook が exit 2 済み。`assert true` 型は目視 |
 | `test/empty-test` | major | hook（Write 時、error） | 本体が空のテストが無い | hook が exit 2 済み |
 | `test/swallowed-error` | major | hook（Write 時、error） | テスト内で例外・エラーを握りつぶしていない | hook が exit 2 済み |
@@ -54,7 +87,7 @@
 
 ## 標準コマンド（分岐カバレッジ）
 
-QA implementer は完了 JSON の `result.coverage` に**分岐カバレッジ**（無ければ行カバレッジ）を書く。閾値は `doc/conventions.md` の `coverage_threshold`（既定 **0.80**）。**変更した関数**の分岐カバレッジが閾値未満ならレビューに進まない（lint と同じゲート）。既存コード全体の数字ではなく、`git diff` で変更した関数に絞って見る。
+**Dev implementer** は完了 JSON の `result.coverage` に**分岐カバレッジ**（無ければ行カバレッジ）を書く。閾値は `doc/conventions.md` の `coverage_threshold`（既定 **0.80**）。**変更した関数**の分岐カバレッジが閾値未満ならレビューに進まない（lint と同じゲート）。既存コード全体の数字ではなく、`git diff` で変更した関数に絞って見る。QA implementer は書かなくてよい（QA worktree には実装が無く測れない）。オーケストレーターは STEP C.5 の統合検証で Dev ユニットテスト + QA 仕様テストを合わせたカバレッジを参考値として記録する。
 
 | 言語 | コマンド | 備考 |
 |---|---|---|
