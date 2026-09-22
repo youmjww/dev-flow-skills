@@ -148,6 +148,8 @@ while 未完了グループが存在する:
 
 `completed_groups` に含まれるグループは **スキップ** して次のグループへ進みます。
 
+**QA タスクが無いグループの扱い:** タスクチェックリストの `#### QA タスク` に実タスクが無く「対応する TC なし」等の注記のみのグループ（基盤構築グループに多い）は、**QA 用の worktree・ブランチ・エージェントを作らない**。Dev 側のみで STEP A〜H を進め、PR も Dev の 1 本だけ作る。使わない QA ブランチを作ると後で削除の手間が増えるだけで意味が無い。
+
 まず、`state.json` の `implementation_progress.group_types["group-N"]` からグループのチーム種別を取得し、実行するエージェントを決定します：
 
 | チーム種別 | 実行するエージェント | 説明 |
@@ -394,6 +396,8 @@ PRタイトル例:
 - `feat(infra): グループ N Infra Dev タスク実装`
 - `test(infra): グループ N Infra QA タスク実装`
 
+**PR は Draft ではなく通常の OPEN（Ready for review）状態で作成する**（`gh pr create` に `--draft` を付けない）。dev-flow の実装フローは、レビュー（STEP D）を既にエージェントが完了させた状態で PR を作成するため、Draft にする理由が無い。プロジェクトの CLAUDE.md 等に「PR は Draft で作成する」旨の指示がある場合でも、「スキル経由で作成された PR はその限りではない」という例外が明記されていることが多いので、そちらを優先する（明記が無い場合は人間に確認する）。
+
 PR のベースブランチは `implementation_progress.base_branch`（`--base` で明示する）。作成した PR 番号はすべて `state.json` の `implementation_progress.pr_numbers["group-N"]` に**配列**で記録する：
 
 ```bash
@@ -466,6 +470,24 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 - `disabled` → `gh pr merge` を発行せず、PR URL を人間に提示して stage-implementation-agent を終了する（マージ後に `/dev-flow` で再入）
 - `enabled` → グループの各 PR に対して 1 コマンドずつ `gh pr merge <N> --merge --delete-branch` を実行する。hook `pr-merge-guard.sh` が自動マージ条件（ベースが `feature/*` かつ `base_branch` と一致・CI 全通過・コンフリクトなし・DB 破壊的変更なし）を検証し、満たさなければ deny される
 
+**マージの順序と QA PR の扱い（Dev/QA が別 PR のグループ）:**
+
+QA ブランチ単体には Dev の実装が含まれないため、**QA PR の CI は Dev PR がマージされるまで必ず失敗する**（テスト対象のエンドポイント・コンポーネントが存在せず 404 / 要素未検出になる）。したがって：
+
+1. まず **Dev PR** をマージする
+2. Dev PR のマージ後、QA PR のブランチにベースブランチの最新を取り込んで CI を再実行させる：
+   ```bash
+   gh api -X PUT repos/{owner}/{repo}/pulls/<QA PR 番号>/update-branch
+   ```
+   （ローカルで `git merge` して push でもよいが、worktree は STEP F で削除済みなので API 経由が手軽）
+3. QA PR の CI が通過してから QA PR をマージする
+
+QA PR の CI 失敗を「実装の不備」と誤解して調査に時間を使わないこと。
+
+**`mergeable=UNKNOWN` で deny された場合:** 直前に別の PR をマージした直後は GitHub 側がマージ可否を再計算中で、数秒〜十数秒 `UNKNOWN` になる。`gh pr view <N> --json mergeable,mergeStateStatus` で `MERGEABLE` / `CLEAN` になるのを確認してから再試行する（`sleep` ではなく確認コマンドで待つ）。実際にコンフリクトしている場合は `CONFLICTING` になるので区別できる。
+
+**複数コマンドをまとめない:** `gh pr merge` は 1 回の Bash 呼び出しで 1 PR だけ実行する。`&&` や `;` で他コマンドと連結すると hook が PR 番号を解析できず「番号で明示してください」と deny される。
+
 結果の扱い：
 
 | 結果 | 動作 |
@@ -473,8 +495,35 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 | グループの全 PR がマージされた | STEP H へ |
 | 一部または全部が deny された | deny 理由を記録し、そのグループを「人間マージ待ち」とする。依存の無い他グループがあれば続行、無ければ人間に「以下の PR は自動マージ条件を満たしません。レビュー・マージ後に `/dev-flow` を実行してください」と PR URL・理由を提示して**終了** |
 | CI が `PENDING` で deny された | 待たずに上記と同じ扱い（次回 `/dev-flow` の再開処理が再試行する） |
+| `disabled`（hook 未導入） | 人間に提示するのみで終了（下記の理由明記は不要。hook が無いこと自体が理由なので繰り返さない） |
 
 deny を回避する目的で `--admin` / `--auto` / `--squash` を試したり、条件を満たすようにファイルを削って再 push したりしてはならない。
+
+**マージがブロックされた理由を PR 自体に明記する（`enabled` で deny された場合）:**
+
+チャットでの報告だけでなく、`gh pr comment <N> --body "..."` で PR に直接コメントを残す（本文を書き換えると元の実装内容の記録が失われるため、コメント追加を使う）。人間が PR 一覧を見ただけで「なぜ自動マージされず自分の対応が必要なのか」が分かるようにする：
+
+```bash
+gh pr comment <N> --body "$(cat <<'EOF'
+⚠️ 自動マージ条件を満たさなかったため、人間によるレビュー・マージが必要です。
+
+**理由**: {hook から返された deny メッセージをそのまま引用、または要約}
+
+**対応**: 上記を確認し、問題なければ GitHub 上で直接マージしてください（このセッションの \`gh pr merge\` は同じ理由で再度ブロックされます）。
+EOF
+)"
+```
+
+deny メッセージの例と、それが「安全装置の正常動作」なのか「実際に直すべき問題」なのかの見分け方：
+
+| deny 理由の例 | 典型的な意味 | 人間への伝え方 |
+|---|---|---|
+| CI チェックが無い / 未通過 | CI 未設定、またはテスト失敗 | CI が無ければ整備を提案（`reference/`に手順があれば従う）、失敗ならテスト内容を確認 |
+| ベースブランチが `feature/*` 以外 | `main` 等への直接マージは常に人間判断が必要という設計 | 「このプロジェクトのルールで意図的にブロックされています」と伝える |
+| DB 破壊的変更のパターンに一致 | 実際に破壊的、または文字列パターンの誤検知（テストデータの `DROP TABLE` 等） | diff を確認し、誤検知なら「テストコード内の文字列で実際の破壊的変更ではありません」と理由を添えて伝える |
+| コンフリクトあり（`mergeable != MERGEABLE`） | ベースブランチが進んだ | 解消してから再試行、または人間に委ねる |
+
+理由が「hook の誤検知」だと判断できる場合でも、hook 自体を回避する操作はしない（上記の deny 回避禁止規定のとおり）。誤検知の根拠を人間に提示し、判断は人間に委ねる。
 
 ---
 
