@@ -2,7 +2,7 @@
 name: dev-flow-implementation
 description: AI駆動開発フローの implementation ステージ（4/6: 並列実装）。タスクチェックリストの DAG `depends_on` を解決しながらグループを並列実行し、各グループ内で Dev/QA を独立 worktree で並列実装します。Infra/App/Cross の 3 種類のチーム構成に対応し、推論トレース・Plan Repair・独立レビュアー・Implements/Tests コミットフッターを伴います。整合性チェック完了後、または `--from=implementation` 起動時に使用します。
 model: haiku
-allowed-tools: Read Write Edit Bash Agent SendMessage AskUserQuestion
+allowed-tools: Read Write Edit Bash Agent SendMessage TaskStop AskUserQuestion
 disable-model-invocation: true
 ---
 
@@ -148,6 +148,8 @@ while 未完了グループが存在する:
 
 `completed_groups` に含まれるグループは **スキップ** して次のグループへ進みます。
 
+**QA タスクが無いグループの扱い:** タスクチェックリストの `#### QA タスク` に実タスクが無く「対応する TC なし」等の注記のみのグループ（基盤構築グループに多い）は、**QA 用の worktree・ブランチ・エージェントを作らない**。Dev 側のみで STEP A〜H を進め、PR も Dev の 1 本だけ作る。使わない QA ブランチを作ると後で削除の手間が増えるだけで意味が無い。
+
 まず、`state.json` の `implementation_progress.group_types["group-N"]` からグループのチーム種別を取得し、実行するエージェントを決定します：
 
 | チーム種別 | 実行するエージェント | 説明 |
@@ -195,6 +197,8 @@ worktree 作成後、state.json の `implementation_progress.active_worktrees` �
 
 Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implementer は **名前付きサブエージェント**として起動し、結果は最終回答（JSON）で受け取ります。並列起動するものは `run_in_background=true` で同一ターンに起動し、順次起動するものは `run_in_background=false` で 1 つずつ起動します。
 
+Dev/QA implementer は数十分単位で稼働するため、pane 型サブエージェントが起動後にツールを一切実行しないままハングする既知の問題の影響を受けやすい。STEP C の完了待機中にハングが疑われる場合は `~/.claude/skills/dev-flow/reference/agent-hang-recovery.md` の検知手順・fork フォールバック手順に従う。
+
 グループのチーム種別に応じて、以下のパターンでエージェントを起動します：
 
 **Infra グループ：Dev (Infra) + QA (Infra) を並列起動**
@@ -220,6 +224,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 0. **規約のバージョン照合**: `doc/process/conventions_verified.md` が無い、または `verified_for` のバージョンが `tech_stack.language_version` / `framework_version` と違う場合、[reference/conventions/version-check.md](reference/conventions/version-check.md) の手順で `conventions-verifier` エージェント（`model="sonnet"`、WebFetch 使用）を先に実行して生成する。バージョンが未検出ならマニフェストから検出して `tech_stack` に書き戻す。WebFetch が使えない環境では「未検証」と明記して先へ進む（止めない）
 1. **言語・フレームワーク規約**: [reference/conventions/testing.md](reference/conventions/testing.md)（常に）と、`state.json.tech_stack` から [reference/conventions/README.md](reference/conventions/README.md) の選択ルールで `conventions/<language>.md` → `conventions/<framework>.md` → `{project}/doc/conventions.md` を Read し、「書き方」セクションを implementer に、「レビューチェックリスト」を reviewer に、「標準コマンド」を両方に注入する（`{CONVENTIONS}` / `{REVIEW_CHECKLIST}` / `{STANDARD_COMMANDS}` プレースホルダー）。`conventions_verified.md` の「変わった項目」「新しい推奨」は両プレースホルダーの**先頭**に「バージョン照合結果（規約ファイルより優先）」として置く。対応ファイルが無い言語は `_template.md` の観点だけで進め、最終報告で「規約ファイル未整備」と伝える
+1.5. **実行環境ノート**: `doc/process/environment.md` があれば全文を「実行環境ノート」としてプロンプト冒頭に注入する（node のバージョン切替・PATH・タイムアウト・ポートの後始末など、コマンドを動かすための注意。無ければ省略。詳細は [reference/agent-prompt-injection.md](reference/agent-prompt-injection.md)）。オーケストレーター自身が環境差異に気付いた時点で作成し、以後の全エージェントに配る
 2. **memory フィードバック**: `~/.claude/projects/$(pwd | sed 's|/|-|g')/memory/` 配下の `feedback_review_*.md` / `feedback_test_failures.md` を読み込んでプロンプト冒頭に追記
 3. **ファイルスコープガードレール**: 担当 worktree 配下の作業許可パターンと禁止パターンを明示
 4. **Opus 昇格時**: Sonnet 試行履歴と未解決指摘を冒頭に追記
@@ -244,7 +249,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 ### STEP C: エージェントの完了待機
 
-グループのチーム種別に応じて、各エージェントの完了通知（最終回答の JSON）を待ちます。`sleep` ポーリングはしません：
+グループのチーム種別に応じて、各エージェントの完了通知（最終回答の JSON）を待ちます。`sleep` ポーリングはしません。ただし、タイムアウト目安（STEP 3.5 相当、モデル別に haiku=5分/sonnet=15分/opus=30分）を超えても完了通知が無い場合は、`~/.claude/skills/dev-flow/reference/agent-hang-recovery.md` の手順でハングかどうかを切り分け、該当すれば同ファイルの fork フォールバックで当該エージェントを再起動する：
 
 - **Infra**: `dev-implementer-infra-group-N` + `qa-implementer-infra-group-N` の両方
 - **App**: `dev-implementer-app-group-N` + `qa-implementer-app-group-N` の両方
@@ -256,7 +261,7 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 
 | status | blocker_type | 対応 |
 |---|---|---|
-| `"completed"` | — | `result.lint.exit_code` が **0 以外、または欠損**なら「lint / format / 型検査が通っていない」として同じ implementer を `SendMessage` で再開して解消させる（最大 2 回、それでも通らなければ `failed` 扱い）。QA implementer は加えて `result.coverage.changed_functions_below_threshold` が**空でなければ**「未到達分岐の TC をテスト定義書に追加して実装する」よう再開させる（最大 2 回。テストを減らす方向の修正は却下）。両方通ったら `result.commits` をログに記録して次の処理へ進む |
+| `"completed"` | — | `result.lint.exit_code` が **0 以外、または欠損**なら「lint / format / 型検査が通っていない」として同じ implementer を `SendMessage` で再開して解消させる（最大 2 回、それでも通らなければ `failed` 扱い）。**Dev implementer** は加えて `result.unit_tests.failed` が 0 でない、または `result.coverage.changed_functions_below_threshold` が**空でなければ**「ユニットテストを直す / 未到達分岐のユニットテストを追加する」よう再開させる（最大 2 回。テストを減らす方向の修正は却下）。**QA implementer** の `result.tests.failed` は Dev 実装が無い worktree では非 0 が正常なので、`note` に「Dev 実装待ち」以外の原因（構文エラー・セットアップ不備）が書かれている場合だけ再開させる。通ったら `result.commits` をログに記録して次の処理へ進む |
 | `"blocked"` | `"plan_repair_needed"` | **Plan Repair フローへ移行**（下記参照） |
 | `"blocked"` | その他 | AskUserQuestion で人間に判断を仰ぐ |
 | `"failed"` | — | AskUserQuestion で人間に報告し指示を仰ぐ |
@@ -271,6 +276,37 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。各 implement
 - 修正履歴は `doc/process/plan_repair_log.md` に追記
 
 JSON パース失敗時のフォールバックは reference 参照。
+
+---
+
+### STEP C.5: Dev + QA 統合検証（レビュー前に必ず実施）
+
+Dev と QA は別 worktree で並行して作業しており、**QA は Dev の実装を見ずにインターフェースを推測してテストを書いている**。そのため、両者を合わせて初めて分かる不一致が高確率で発生する（実例: aria-label の命名違い、React Testing Library の `cleanup` 未登録によるテスト間の DOM 残留、エラーメッセージの句点有無、Dev/QA 双方が同名テストファイルを作成してのコンフリクト）。レビュアーに渡す前に、オーケストレーターが機械的に統合して実テストを回す。
+
+**手順（グループごと、Dev/QA 両方の implementer が `completed` を返した後）:**
+
+1. QA worktree に Dev ブランチを**検証用に**マージする（QA 側で行う。Dev 側には QA を混ぜない）：
+   ```bash
+   cd {MAIN_DIR}/../worktree-qa-{team}-group-N
+   git merge dev/{team}-group-N -m "merge: 検証用（後で取り消す）"
+   ```
+   - **コンフリクトした場合**: 同じパスのファイルを Dev/QA 双方が作っている。テストファイルなら QA 側を正とし、Dev implementer に「そのファイルを `git rm` して再コミット」を `SendMessage` で依頼する。実装ファイルなら QA 側の変更を取り消す
+2. QA worktree で **Dev のユニットテストと QA の仕様テストの両方**・lint・型検査を**実際に実行**する（`tech_stack` の標準コマンド。依存物が無ければ `composer install` / `npm install` 等を先に行う）。あわせて規約の「標準コマンド（分岐カバレッジ）」で統合カバレッジを計測し、参考値として STEP E の PR 説明に書く（ゲートは Dev の `result.coverage` で既に掛かっているので、ここでは記録のみ）
+3. 結果で分岐：
+   | 結果 | 対応 |
+   |---|---|
+   | 全パス | 4 へ |
+   | テストコード側の不備（セットアップ漏れ・文言のタイプミス・セレクタの推測違い等） | QA implementer に `SendMessage` で修正を依頼する（軽微で明白なら オーケストレーターが直接直してもよい）。直った後 1 からやり直す |
+   | 実装側の不備（QA の期待がテスト定義書どおりで、実装がそれに従っていない） | Dev implementer に `SendMessage` で修正を依頼する。直った後 1 からやり直す |
+   | テスト定義書自体の矛盾 | STEP G の `doc_issues` として扱い、人間に判断を仰ぐ |
+4. 検証用マージを**必ず取り消す**（PR の diff に Dev の変更が混ざらないようにする）：
+   ```bash
+   git reset --hard {マージ前の QA コミット}
+   ```
+   取り消し前に QA 側で修正コミットを積んだ場合は、`git stash` → `reset --hard` → `stash pop` → 再コミットで修正だけを残す
+5. 統合で全パスした事実（Dev ユニットテスト件数 + QA 仕様テスト件数、統合カバレッジ）を STEP E の PR 説明に書く
+
+この STEP を飛ばすと、レビュアーが「QA テストは Dev 実装に対して通るか」を自前で検証することになり時間が掛かるうえ、PR マージ後の test ステージで初めて失敗が露見する。
 
 ---
 
@@ -308,7 +344,7 @@ git diff や git log などの読み取り系 Bash コマンドは使用可能�
 {REVIEW_CHECKLIST}
 （言語・フレームワーク・プロジェクト規約のルール ID・重大度・確認方法。「確認方法」の grep は実際に実行して確認する）
 
-**テストへの要求（Dev レビューでも見る）:** この実装で増えた・変わった `if` / `switch` / 早期 return / `catch` を列挙し、それぞれに対応する TC がテスト定義書と QA worktree のテストにあるか確認する（`test/branch-coverage`）。無ければ `changes_requested` にして `fix` に「TC-NNN を追加: {分岐の条件}」と書く。QA implementer に回る
+**テストへの要求（Dev レビューで見る）:** この実装で増えた・変わった `if` / `switch` / 早期 return / `catch` / 三項演算子を列挙し、それぞれを通る**ユニットテストが Dev worktree にある**か確認する（`test/branch-coverage`。置き場は `testing.md` の「Dev と QA のテスト分担」）。無ければ `changes_requested` にして `fix` に「ユニットテスト追加: {関数}: {分岐の条件}」と書く。**Dev implementer に回る**（QA には回さない。QA は実装の分岐を知らない）。あわせて Dev が仕様テスト（`tests/Feature/**` / `src/App.test.tsx` / `e2e/**` 等、TC-ID 付き）を書いていないか確認し、書いていれば `test/unit-vs-spec-split` として差し戻す（QA と同じパスにファイルが生まれてコンフリクトする）。出力の**形式**（日時フォーマット・レスポンスのラップ・エラーメッセージ文言）が仕様書どおりかのユニットテストがあるかも見る（実戦で日時が UTC で返るバグを Feature テストが見逃した事例あり）
 
 **出力（最終回答。SendMessage は使わない）:**
 
@@ -339,7 +375,7 @@ blocker / major は**見つけたものをすべて**挙げる。minor は最大
 #### QA (Infra) レビュー（Infra / Cross グループ）
 
 Infra QA のシニアレビュアーエージェントを起動（`model="opus"`、編集禁止をプロンプトに明記）。
-QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。`{REVIEW_CHECKLIST}` のうち `test/*`（[conventions/testing.md](reference/conventions/testing.md)）と各言語のテスト関連ルール（`*/table-driven` `*/parametrize` `*/test-*` 等）を照合する。特に `test/no-delete` / `test/no-skip` / `test/expected-from-impl` は blocker。`git diff` で削除行を確認し、`result.coverage` の未到達分岐と実装の分岐を突き合わせる。出力は Dev レビューと同じ JSON。`changes_requested` → qa-implementer-infra-group-N に渡して修正（最大5回）。
+QA レビュアーは「素朴な質問だけ」する観点を採用: コードの良し悪しではなく、理解できない点・テストの意図が不明な点のみ指摘する。`{REVIEW_CHECKLIST}` のうち `test/*`（[conventions/testing.md](reference/conventions/testing.md)）と各言語のテスト関連ルール（`*/table-driven` `*/parametrize` `*/test-*` 等）を照合する。特に `test/no-delete` / `test/no-skip` / `test/expected-from-impl` は blocker。`git diff` で削除行を確認する。**TC 網羅**（`test/tc-coverage`）: テスト定義書 frontmatter の `test_cases[].id` と QA worktree のテストの TC-ID を突き合わせ、欠けが無いか見る。**置き場**（`test/unit-vs-spec-split`）: QA が実装の内部関数を直接呼ぶユニットテストや `tests/Unit/**` を書いていないか見る（Dev の担当。同じパスでコンフリクトする）。実装の分岐網羅は Dev reviewer の担当なので見なくてよい。出力は Dev レビューと同じ JSON。`changes_requested` → qa-implementer-infra-group-N に渡して修正（最大5回）。
 
 #### QA (App) レビュー（App / Cross グループ）
 
@@ -360,6 +396,8 @@ App QA のシニアレビュアーエージェントを起動（`model="opus"`�
 PRタイトル例: 
 - `feat(infra): グループ N Infra Dev タスク実装`
 - `test(infra): グループ N Infra QA タスク実装`
+
+**PR は Draft ではなく通常の OPEN（Ready for review）状態で作成する**（`gh pr create` に `--draft` を付けない）。dev-flow の実装フローは、レビュー（STEP D）を既にエージェントが完了させた状態で PR を作成するため、Draft にする理由が無い。プロジェクトの CLAUDE.md 等に「PR は Draft で作成する」旨の指示がある場合でも、「スキル経由で作成された PR はその限りではない」という例外が明記されていることが多いので、そちらを優先する（明記が無い場合は人間に確認する）。
 
 PR のベースブランチは `implementation_progress.base_branch`（`--base` で明示する）。作成した PR 番号はすべて `state.json` の `implementation_progress.pr_numbers["group-N"]` に**配列**で記録する：
 
@@ -433,6 +471,24 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 - `disabled` → `gh pr merge` を発行せず、PR URL を人間に提示して stage-implementation-agent を終了する（マージ後に `/dev-flow` で再入）
 - `enabled` → グループの各 PR に対して 1 コマンドずつ `gh pr merge <N> --merge --delete-branch` を実行する。hook `pr-merge-guard.sh` が自動マージ条件（ベースが `feature/*` かつ `base_branch` と一致・CI 全通過・コンフリクトなし・DB 破壊的変更なし）を検証し、満たさなければ deny される
 
+**マージの順序と QA PR の扱い（Dev/QA が別 PR のグループ）:**
+
+QA ブランチ単体には Dev の実装が含まれないため、**QA PR の CI は Dev PR がマージされるまで必ず失敗する**（テスト対象のエンドポイント・コンポーネントが存在せず 404 / 要素未検出になる）。したがって：
+
+1. まず **Dev PR** をマージする
+2. Dev PR のマージ後、QA PR のブランチにベースブランチの最新を取り込んで CI を再実行させる：
+   ```bash
+   gh api -X PUT repos/{owner}/{repo}/pulls/<QA PR 番号>/update-branch
+   ```
+   （ローカルで `git merge` して push でもよいが、worktree は STEP F で削除済みなので API 経由が手軽）
+3. QA PR の CI が通過してから QA PR をマージする
+
+QA PR の CI 失敗を「実装の不備」と誤解して調査に時間を使わないこと。
+
+**`mergeable=UNKNOWN` で deny された場合:** 直前に別の PR をマージした直後は GitHub 側がマージ可否を再計算中で、数秒〜十数秒 `UNKNOWN` になる。`gh pr view <N> --json mergeable,mergeStateStatus` で `MERGEABLE` / `CLEAN` になるのを確認してから再試行する（`sleep` ではなく確認コマンドで待つ）。実際にコンフリクトしている場合は `CONFLICTING` になるので区別できる。
+
+**複数コマンドをまとめない:** `gh pr merge` は 1 回の Bash 呼び出しで 1 PR だけ実行する。`&&` や `;` で他コマンドと連結すると hook が PR 番号を解析できず「番号で明示してください」と deny される。
+
 結果の扱い：
 
 | 結果 | 動作 |
@@ -440,8 +496,35 @@ jq -e '[.. | strings | select(test("pr-merge-guard"))] | length > 0' ~/.claude/s
 | グループの全 PR がマージされた | STEP H へ |
 | 一部または全部が deny された | deny 理由を記録し、そのグループを「人間マージ待ち」とする。依存の無い他グループがあれば続行、無ければ人間に「以下の PR は自動マージ条件を満たしません。レビュー・マージ後に `/dev-flow` を実行してください」と PR URL・理由を提示して**終了** |
 | CI が `PENDING` で deny された | 待たずに上記と同じ扱い（次回 `/dev-flow` の再開処理が再試行する） |
+| `disabled`（hook 未導入） | 人間に提示するのみで終了（下記の理由明記は不要。hook が無いこと自体が理由なので繰り返さない） |
 
 deny を回避する目的で `--admin` / `--auto` / `--squash` を試したり、条件を満たすようにファイルを削って再 push したりしてはならない。
+
+**マージがブロックされた理由を PR 自体に明記する（`enabled` で deny された場合）:**
+
+チャットでの報告だけでなく、`gh pr comment <N> --body "..."` で PR に直接コメントを残す（本文を書き換えると元の実装内容の記録が失われるため、コメント追加を使う）。人間が PR 一覧を見ただけで「なぜ自動マージされず自分の対応が必要なのか」が分かるようにする：
+
+```bash
+gh pr comment <N> --body "$(cat <<'EOF'
+⚠️ 自動マージ条件を満たさなかったため、人間によるレビュー・マージが必要です。
+
+**理由**: {hook から返された deny メッセージをそのまま引用、または要約}
+
+**対応**: 上記を確認し、問題なければ GitHub 上で直接マージしてください（このセッションの \`gh pr merge\` は同じ理由で再度ブロックされます）。
+EOF
+)"
+```
+
+deny メッセージの例と、それが「安全装置の正常動作」なのか「実際に直すべき問題」なのかの見分け方：
+
+| deny 理由の例 | 典型的な意味 | 人間への伝え方 |
+|---|---|---|
+| CI チェックが無い / 未通過 | CI 未設定、またはテスト失敗 | CI が無ければ整備を提案（`reference/`に手順があれば従う）、失敗ならテスト内容を確認 |
+| ベースブランチが `feature/*` 以外 | `main` 等への直接マージは常に人間判断が必要という設計 | 「このプロジェクトのルールで意図的にブロックされています」と伝える |
+| DB 破壊的変更のパターンに一致 | 実際に破壊的、または文字列パターンの誤検知（テストデータの `DROP TABLE` 等） | diff を確認し、誤検知なら「テストコード内の文字列で実際の破壊的変更ではありません」と理由を添えて伝える |
+| コンフリクトあり（`mergeable != MERGEABLE`） | ベースブランチが進んだ | 解消してから再試行、または人間に委ねる |
+
+理由が「hook の誤検知」だと判断できる場合でも、hook 自体を回避する操作はしない（上記の deny 回避禁止規定のとおり）。誤検知の根拠を人間に提示し、判断は人間に委ねる。
 
 ---
 

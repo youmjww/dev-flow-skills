@@ -4,6 +4,7 @@
 
 ## Contents
 - 言語・フレームワーク規約の注入
+- 実行環境ノートの注入
 - memory フィードバックの注入
 - レビュー指摘・テスト失敗の memory 保存
 - ファイルスコープガードレール
@@ -24,6 +25,25 @@
 `doc/conventions.md` にはセクション見出しが無くてもよい。全文を `{CONVENTIONS}` と `{REVIEW_CHECKLIST}` の両方の末尾に「## プロジェクト固有規約（最優先）」として付ける。
 
 reviewer の findings で同じ `rule` が 3 回以上出た場合は下記「memory 保存」のフォーマットで保存する。`rule` がキーになるので表記を揃えること。
+
+## 実行環境ノートの注入
+
+規約（どう書くか）とは別に、**この環境でコマンドを動かすための注意**を全 implementer / reviewer / test-runner に共通で渡す。`doc/process/environment.md` があれば全文を「## 実行環境ノート（コマンド実行前に必ず読む）」としてプロンプト冒頭に注入する。無ければ省略する。
+
+`environment.md` は requirements または bootstrap ステージで tech_stack を確定した際、あるいは implementation の最初のグループでオーケストレーターが環境差異に気付いた時点で作る。書くべき典型例：
+
+```markdown
+# 実行環境ノート
+
+- Node.js: シェル既定は v10（古い）。**すべての node / npm / npx コマンドの前に `source ~/.nvm/nvm.sh && nvm use 22 &&` を付ける**（nvm は非対話シェルで自動ロードされない）
+- PHP: 8.5（`composer.json` の `^8.3` より新しい。lock ファイルは 8.5 で解決済みなので CI も 8.5 にする）
+- composer: `/opt/homebrew/bin/composer`。`create-project` / `install` は `--no-interaction` を付け、`timeout 180` で囲む
+- ポート: backend 8000 / frontend 5173。E2E 実行前に `lsof -ti:8000 -sTCP:LISTEN | xargs -r kill` で残留プロセスを止める
+- worktree は `vendor/` `node_modules/` `.env` を含まない（gitignore）。各 worktree で最初に `composer install` / `npm install` / `.env` 作成が要る
+- 長時間コマンドは必ず `timeout N` を付ける。3 分応答が無ければ中断して別手段
+```
+
+これが無いと、オーケストレーターが毎回すべてのエージェントのプロンプトに同じ注意を手書きすることになり、書き漏らしたエージェントがハング・失敗する（実例: nvm 未指定で Vite が動かない、`timeout` 無しで `composer create-project` が固まる）。
 
 ## memory フィードバックの注入
 

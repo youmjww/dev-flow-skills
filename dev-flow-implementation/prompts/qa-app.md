@@ -32,7 +32,8 @@ baseline_commit: `{BASELINE_COMMIT}`
 
 **厳守（hook と reviewer が機械的に見る）:**
 - 既存テストを削除・スキップ・コメントアウトしない。通らないテストは Dev の修正対象であり、QA が期待値を変えて通してはいけない。テスト定義書が誤っていると考えるなら `blocked` で報告する
-- 変更した関数・エンドポイントごとに異常系を最低 1 つ、`if` / `switch` / 早期 return / `catch` の分岐ごとに 1 ケース。テスト定義書に無い分岐は TC を**追加**（`status: added`）してから実装する
+- **あなたが書くのは仕様テスト（ブラックボックス）**。テスト定義書の TC-NNN を 1 つずつ、エンドポイント（HTTP 経由）・画面（App 全体をレンダリング）・E2E の粒度で実装する。置き場は規約 `testing.md` の「Dev と QA のテスト分担」の表（Laravel: `tests/Feature/**`、React: `src/App.test.tsx`、E2E: `e2e/**`）。**実装の内部関数・クラス単体のユニットテスト（`tests/Unit/**`、`src/components/X.test.tsx` 等）は書かない**。それは Dev implementer が自分の worktree で分岐網羅して書いている。あなたの worktree には Dev の実装が無いので、内部構造を前提にしたテストは書けないし書かなくてよい
+- エンドポイント・画面ごとに異常系（不正入力・存在しない ID・依存先の失敗）を最低 1 つ。テスト定義書に異常系の TC が無ければ TC を**追加**（`status: added`）してから実装する。Dev から `uncertainty_points` で「TC 不足: {関数}: {分岐条件}」の申告があれば、それも TC として追加する
 
 - テストファイルを Write すると hook（`test-lint.py`）が静的検証する。「テストコード規約に違反」のフィードバックが返ったら ERROR をすべて直して**同じファイルを書き直す**（テストを減らして通す方向は禁止）。WARN（sleep / 現在時刻 / 乱数 / tautology）は該当箇所を直すか、正当な理由を完了 JSON の `uncertainty_points` に書く
 
@@ -51,7 +52,7 @@ baseline_commit: `{BASELINE_COMMIT}`
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する。空なら下の標準コマンドを使う：
 {STANDARD_COMMANDS}
 - 最後に実行したコマンドと終了コードを完了 JSON の `result.lint` に必ず書く（0 以外だとレビューに進めない）
-- カバレッジを規約の「標準コマンド（分岐カバレッジ）」で計測し、`result.coverage` に書く。**変更した関数**のうち閾値（`doc/conventions.md` の `coverage_threshold`、既定 0.80）未満のものを `changed_functions_below_threshold` に列挙する（空でないとレビューに進めない）
+- テストを実行して結果を `result.tests` に書く。あなたの worktree には Dev の実装が無いため、**仕様テストは大半が失敗して正常**（エンドポイント未定義の 404、コンポーネント未検出など）。失敗数と「Dev 実装待ちのため」の旨を書く。構文エラー・import エラー・セットアップ不備（テスト環境の `cleanup` 未登録等）による失敗は Dev 実装待ちではないので直す。カバレッジは計測しなくてよい（実装が無いと測れない。統合検証でオーケストレーターが測る）
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
 - コミットメッセージ例: `test: {テスト名} を実装`
@@ -69,7 +70,7 @@ baseline_commit: `{BASELINE_COMMIT}`
     "changed_files": {変更ファイル数},
     "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
     "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0},
-    "coverage": {"kind": "branch", "value": 0.87, "changed_functions_below_threshold": []}
+    "tests": {"command": "./vendor/bin/pest tests/Feature", "passed": 5, "failed": 32, "note": "失敗は Dev 実装待ち（全て 404）。セットアップ起因の失敗なし"}
   },
   "confidence": 0.85,
   "uncertainty_points": [],

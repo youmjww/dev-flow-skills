@@ -45,7 +45,9 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - **以下の規約を守る**（言語・フレームワーク・プロジェクトの順。矛盾する場合は後のものが優先）：
 {CONVENTIONS}
 - テスト定義書を参照し、テストから呼び出しやすいインターフェース設計にする
-- 追加した分岐（`if` / `switch` / 早期 return / `catch`）に対応する TC がテスト定義書に無い場合、完了 JSON の `uncertainty_points` に「TC 不足: {関数}: {分岐条件}」として申告する（QA が TC を追加する）
+- **自分が書いた関数・クラス・コンポーネントのユニットテストを書く**（規約 `testing.md` の「Dev と QA のテスト分担」「書き方（Dev implementer 向け）」に従う）。置き場は実装と対（Laravel: `tests/Unit/**`、React: `src/**/X.test.tsx`、Go: `x_test.go`）。分岐（`if` / `switch` / 早期 return / `catch` / 三項演算子）ごとに 1 ケース、境界値を含める。出力の**形式**（日時フォーマット・レスポンスのラップ）も検証する
+- **テスト定義書の TC-ID に対応する仕様テスト（Feature / App 結合 / E2E。`tests/Feature/**` `src/App.test.tsx` `e2e/**` 等）は書かない**。それは QA implementer が別 worktree で並行して書いている。Dev 側でも書くと同じパスのファイルが両ブランチに生まれてマージ時にコンフリクトする（実例: Dev/QA 双方が `tests/Feature/TaskApiTest.php` を作成）。エンドポイント全体の動作確認が必要なら `php artisan tinker` / `curl` / コミットしない一時スクリプトで行う
+- 追加した分岐のうち「これは仕様レベルの TC としてテスト定義書にあるべき」と思うものがあれば、完了 JSON の `uncertainty_points` に「TC 不足: {関数}: {分岐条件}」として申告する（QA が TC を追加する）。ユニットテストで自分がカバーしていれば申告不要
 
 **2. ブロッカーチェック**
 - 要件の解釈が複数あり判断できない場合は、実装を中断してメインオーケストレーターに JSON で報告する（step 5 参照）
@@ -71,6 +73,7 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 - `{TECH_STACK.linter}` / `{TECH_STACK.formatter}` を実行してエラーをすべて解消する。空なら下の標準コマンドを使う：
 {STANDARD_COMMANDS}
 - 最後に実行したコマンドと終了コードを完了 JSON の `result.lint` に必ず書く（0 以外だとレビューに進めない）
+- 自分が書いたユニットテストを実行して全パスを確認し、規約の「標準コマンド（分岐カバレッジ）」で**変更した関数**の分岐カバレッジを計測する。閾値（`doc/conventions.md` の `coverage_threshold`、既定 0.80）未満の関数を `result.coverage.changed_functions_below_threshold` に列挙する（空でないとレビューに進めない。テストを減らして数字を上げる方向は禁止）
 
 **4. タスク単位コミット**（worktree ディレクトリ内で git commit）
 
@@ -115,7 +118,9 @@ Tests: TC-001, TC-002
   "result": {
     "changed_files": {変更ファイル数},
     "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
-    "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0}
+    "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0},
+    "unit_tests": {"command": "go test ./pkg/...", "passed": 12, "failed": 0},
+    "coverage": {"kind": "branch", "value": 0.87, "changed_functions_below_threshold": []}
   },
   "confidence": 0.85,
   "uncertainty_points": [

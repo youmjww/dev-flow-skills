@@ -4,7 +4,7 @@ description: AI駆動開発フローのメインオーケストレーター。re
 model: haiku
 argument-hint: "[--kind=feature|change|fix|refactor] [--from=stage] [--bootstrap] [--dry-run] タスク説明"
 # allowed-tools はこのスキルを呼び出したターンの親セッションにだけ効く（サブエージェントは親のパーミッションモードを継承する）
-allowed-tools: Read Write Edit Bash Agent AskUserQuestion
+allowed-tools: Read Write Edit Bash Agent SendMessage TaskStop AskUserQuestion
 # コミット・worktree・PR 作成・自動マージまで行う副作用の大きいワークフローなので、起動は人間の /dev-flow に限定する
 disable-model-invocation: true
 ---
@@ -225,7 +225,11 @@ KIND が未指定なら AskUserQuestion で確認（TASK の文面から推測�
 
 **2. 無限ループ検出:** 同じ `(stage, agent_name)` の組み合わせが `harness.stage_history` に5回以上あれば AskUserQuestion で確認。
 
-**3. タイムアウト目安:** haiku=5分 / sonnet=15分 / opus=30分。超過時は AskUserQuestion で人間に確認。
+**3. タイムアウト目安:** haiku=5分 / sonnet=15分 / opus=30分。超過時は AskUserQuestion で人間に確認する前に、まず `reference/agent-hang-recovery.md` の検知手順でハング（環境起因で pane 型サブエージェントが一切ツールを実行しない状態）かどうかを切り分ける。
+
+**STEP 4 で起動する `stage-*-agent`（中間管理エージェント）がハングした場合は fork フォールバックを使わない**（fork は `Agent` ツールで子サブエージェントを起動できないため、`stage-implementation-agent` のように内部で Dev/QA/レビュアーをさらに起動する設計のエージェントでは fork にしても実質何もできず終了する。実地で確認済み）。この場合は `reference/agent-hang-recovery.md` の「中間管理エージェントがハングした場合」の手順に従い、**オーケストレーター（このセッション）が該当ステージのスキル（`~/.claude/skills/dev-flow-<stage>/SKILL.md`）を自分で読み込み、STEP 0 以降を直接実行する**（worktree 作成・state.json 更新・Dev/QA/レビュアーの起動を自分の Agent ツールで行う。これらは末端の実行者なので通常どおり fork フォールバックが効く）。
+
+単に処理が長い場合（ハングでない）は従来どおり AskUserQuestion で人間に確認する。
 
 1・2 は hook 導入環境では `pre-agent-check.sh` が Agent 起動時に機械的に検証する（違反時は `ask` で停止）。実測の所要時間は `doc/process/flow.log` の `duration_seconds` で確認できる。
 
