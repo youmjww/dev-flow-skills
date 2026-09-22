@@ -41,6 +41,20 @@ baseline_commit: `{BASELINE_COMMIT}`
 
 CI 設定タスクの説明には次の注意を添える：「`.github/workflows/*.yml` を push するには gh CLI のトークンに `workflow` スコープが必要。無ければ `gh auth refresh -h github.com -s workflow` でデバイス認証を行う（人間のブラウザ操作が要る）。また CI で使う言語ランタイムのバージョンは、ローカルの実バージョン（`php --version` / `node --version` 等）と lock ファイルが要求するバージョンに合わせる（例: ローカル PHP 8.5 で composer.lock を作ったのに CI を PHP 8.3 にすると依存解決で失敗する）」。
 
+**実バージョンの書き戻し（新規プロジェクトセットアップ時）:**
+
+要件定義書の技術スタック表に書かれたバージョン（例: PHP 8.3 / Laravel 12）と、`composer create-project` / `npm install` が実際に解決したバージョン（lock ファイル）は食い違うことが多い（実戦: 要件は Laravel 12 / Vite 6、実際は Laravel 13 / Vite 8）。乖離を compliance まで持ち越すと人間判断が 1 回余分に要る。基盤グループの**最後の Dev タスク**として次を含める：
+
+- `実バージョンの書き戻し: composer.lock / package-lock.json / go.sum / uv.lock 等から言語・フレームワーク・主要ライブラリの実バージョンを読み取り、(1) doc/process/state.json の tech_stack.language_version / framework_version を更新、(2) 要件定義書の技術スタック表の該当行を実バージョンに更新して「lock ファイルより（YYYY-MM-DD）」と注記する。要件定義書のバージョンが「以上」「以下」の制約として書かれている場合は制約を満たすか確認し、満たさなければ blocked で報告する`
+
+`mode = "incremental"` ではこのタスクは不要（bootstrap または前回の run で書き戻し済み。依存を上げるタスクがある場合だけ、そのタスク内で同じ書き戻しを行う）。
+
+**スキャフォールド不要物の除去（新規プロジェクトセットアップ時）:**
+
+`composer create-project` / `npm create` / `rails new` 等のスキャフォールドは、要件に無いものを大量に生成する（例: API 専用なのに `routes/web.php` の welcome ビューと `resources/views/`、`tests/Feature/ExampleTest.php` `tests/Unit/ExampleTest.php`、フロントを別に持つのに `backend/package.json` `vite.config.js` `resources/js`）。さらに **`CLAUDE.md` / `AGENTS.md` を生成するもの**（Laravel Boost 等）があり、サブエージェントがそれを読むと「`composer require xxx` を実行せよ」等の指示に従って要件外の依存を増やしかねない。CI 整備タスクと同じ基盤グループに、次のタスクを必ず含める：
+
+- `スキャフォールド不要物の除去: 要件定義書の技術スタック（API 専用 / Blade 不使用 / フロントは別ディレクトリ 等）に照らして、生成物のうち使わないもの（ビュー・サンプルテスト・不要な package.json / vite 設定・サンプルルート）を削除する。生成された CLAUDE.md / AGENTS.md はプロジェクトの規約（doc/conventions.md）に置き換えるか削除する。削除したものの一覧を PR 説明に書く`
+
 **E2E グループの Dev / QA 分担ルール:**
 
 E2E テスト（Playwright 等）のグループは「環境構築」と「テストシナリオ実装」が不可分で、Dev と QA に分けると**双方が同じ `e2e/` ディレクトリ一式を作ってしまう**（実例あり）。E2E グループは次のいずれかにする：

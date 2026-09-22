@@ -9,7 +9,7 @@
 #     - PR が OPEN かつ Draft でない
 #     - mergeable == MERGEABLE（コンフリクトなし）
 #     - CI チェックがすべて成功（チェックが 1 つも無ければ拒否）
-#     - diff に DB の破壊的変更が含まれない（db-destructive-patterns.txt）
+#     - diff に DB の破壊的変更が含まれない（db-destructive-patterns.txt。テストファイル内の文字列は対象外）
 #     - diff にテストの削除・スキップ・無効化が含まれない（test-guard-patterns.txt）
 #     - マージ方式は --merge のみ（--squash / --rebase / --auto / --admin は拒否）
 #     - 1 コマンドにつき 1 PR、番号または URL で明示
@@ -123,9 +123,21 @@ esac
 # ---- DB 破壊的変更 ----
 DIFF="$(gh pr diff "$PR" 2>/dev/null)" || deny "dev-flow hook: gh pr diff $PR に失敗しました。"
 ADDED="$(printf '%s\n' "$DIFF" | grep -E '^\+[^+]' || true)"
-HITS="$(printf '%s\n' "$ADDED" | grep -iE -f <(grep -vE '^\s*(#|$)' "$PATTERNS") | head -5 || true)"
+# DB 検査はテストファイル以外の追加行だけを見る（SQL インジェクション対策テストのデータ "'; DROP TABLE x; --" 等で
+# 毎回止まるのを避ける）。テスト削除検査と Terraform 検査は従来どおり全 diff を対象にする。
+NON_TEST_ADDED="$(printf '%s\n' "$DIFF" | awk '
+  /^diff --git / { f = $0; sub(/^diff --git a\/[^ ]* b\//, "", f); skip = is_test(f); next }
+  /^\+[^+]/ && !skip { print }
+  function is_test(p) {
+    if (p ~ /(^|\/)doc\/test-spec\//) return 1
+    if (p ~ /(_test\.go|_test\.py|\.test\.(ts|tsx|js|jsx)|\.spec\.(ts|tsx|js|jsx)|Test\.php|_spec\.rb)$/) return 1
+    if (p ~ /(^|\/)test_[^\/]*\.py$/) return 1
+    if (p ~ /(^|\/)(tests?|__tests__|spec|e2e)\//) return 1
+    return 0
+  }')"
+HITS="$(printf '%s\n' "$NON_TEST_ADDED" | grep -iE -f <(grep -vE '^\s*(#|$)' "$PATTERNS") | head -5 || true)"
 # WHERE 句の無い DELETE FROM（全行削除）
-DEL_ALL="$(printf '%s\n' "$ADDED" | grep -iE 'DELETE[[:space:]]+FROM[[:space:]]' | grep -ivE '[[:space:]]WHERE[[:space:]]' | head -5 || true)"
+DEL_ALL="$(printf '%s\n' "$NON_TEST_ADDED" | grep -iE 'DELETE[[:space:]]+FROM[[:space:]]' | grep -ivE '[[:space:]]WHERE[[:space:]]' | head -5 || true)"
 HITS="$(printf '%s\n%s' "$HITS" "$DEL_ALL" | sed '/^$/d')"
 TF_DEL="$(printf '%s\n' "$DIFF" | grep -E '^-[^-]' | grep -E 'resource[[:space:]]+"(aws_(db_instance|rds_cluster|rds_cluster_instance|dynamodb_table|elasticache_cluster|elasticache_replication_group|redshift_cluster|docdb_cluster|neptune_cluster)|google_sql_database_instance|azurerm_(mssql|postgresql|mysql)_[a-z_]*server)"' | head -5 || true)"
 if [ -n "$HITS" ] || [ -n "$TF_DEL" ]; then

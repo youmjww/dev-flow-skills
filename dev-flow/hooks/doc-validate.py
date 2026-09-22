@@ -9,7 +9,11 @@
   doc-validate.py [--project-dir DIR] FILE...      # 指定ファイルを検証
   doc-validate.py [--project-dir DIR] --all        # doc/ 配下の対象をすべて検証
 終了コード: 0 = 違反なし（WARN は許容）, 1 = ERROR あり, 2 = 使い方の誤り
-出力: 1 行 1 件 "ERROR|WARN <file>: <message>"、最後に "summary: N errors, M warnings"
+出力: 1 行 1 件 "ERROR|WARN <file>:<line>: <message>  → <直し方>"、最後に "summary: N errors, M warnings"
+
+書きかけの文書: 大きな文書を分割して書く場合、ファイル末尾に "<!-- dev-flow: in-progress -->" を置くと、
+「frontmatter にあるが本文に見出しが無い」「本文にあるが frontmatter に無い」を ERROR ではなく WARN として扱う
+（他の検証はそのまま）。完成時にマーカーを消すこと。--all / --strict ではマーカーの残存自体が ERROR。
 """
 import argparse
 import glob
@@ -138,16 +142,35 @@ def parse_yaml_subset(src):
 # ---------------------------------------------------------------------------
 # 検証
 # ---------------------------------------------------------------------------
+IN_PROGRESS_MARKER = "<!-- dev-flow: in-progress -->"
+
+
 class Report:
-    def __init__(self):
+    def __init__(self, strict=False):
         self.errors = []
         self.warnings = []
+        self.strict = strict
+        self.text = ""       # 現在検証中のファイル本文（行番号の解決用）
+        self.in_progress = False
 
-    def error(self, f, msg):
-        self.errors.append(f"ERROR {f}: {msg}")
+    def _fmt(self, f, msg, hint, needle):
+        line = ""
+        if needle and self.text:
+            for n, l in enumerate(self.text.split("\n"), 1):
+                if needle in l:
+                    line = f":{n}"
+                    break
+        return f"{f}{line}: {msg}" + (f"  → {hint}" if hint else "")
 
-    def warn(self, f, msg):
-        self.warnings.append(f"WARN {f}: {msg}")
+    def error(self, f, msg, hint="", needle=""):
+        self.errors.append("ERROR " + self._fmt(f, msg, hint, needle))
+
+    def warn(self, f, msg, hint="", needle=""):
+        self.warnings.append("WARN " + self._fmt(f, msg, hint, needle))
+
+    def soft(self, f, msg, hint="", needle=""):
+        """書きかけマーカーがあれば WARN、無ければ ERROR"""
+        (self.warn if self.in_progress else self.error)(f, msg, hint, needle)
 
 
 def doc_type_of(path):
@@ -162,14 +185,23 @@ def doc_type_of(path):
 def load_frontmatter(path, rep, rel):
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
+    rep.text = text
+    rep.in_progress = IN_PROGRESS_MARKER in text
+    if rep.in_progress:
+        if rep.strict:
+            rep.error(rel, f"書きかけマーカー {IN_PROGRESS_MARKER} が残っています", "文書を完成させてマーカーを削除する", IN_PROGRESS_MARKER)
+        else:
+            rep.warn(rel, f"書きかけマーカー {IN_PROGRESS_MARKER} があるため、frontmatter と本文の対応は WARN 扱い", "完成したらマーカーを削除する（削除後の Write で完全検証される）", IN_PROGRESS_MARKER)
     fm_src, body = split_frontmatter(text)
     if fm_src is None:
-        rep.error(rel, "frontmatter（先頭の --- ブロック）がありません")
+        rep.error(rel, "frontmatter（先頭の --- ブロック）がありません",
+                  "ファイルの 1 行目を --- にし、doc_type と ID 一覧を書いてから --- で閉じる（例は各 writer プロンプトの「出力フォーマット」）")
         return None, body
     try:
         return parse_yaml_subset(fm_src), body
     except ValueError as e:
-        rep.error(rel, f"frontmatter を解析できません: {e}")
+        rep.error(rel, f"frontmatter を解析できません: {e}",
+                  "インデントは 2 スペース、リストは「- id: TC-001」、covers は「covers: [REQ-001, REQ-002]」の形にする")
         return None, body
 
 
@@ -192,21 +224,29 @@ def collect_req_ids(project_dir):
 
 def check_ids(rep, rel, items, pattern, body):
     seen = set()
+    prefix = pattern.split("-")[0].lstrip("^")
     for it in items:
         if not isinstance(it, dict) or not it.get("id"):
-            rep.error(rel, f"id の無い項目があります: {it!r}")
+            rep.error(rel, f"id の無い項目があります: {str(it)[:60]}", f"各項目を「- id: {prefix}-NNN」で始める")
             continue
         i = str(it["id"])
+        needle = f"id: {i}"
         if not re.match(pattern, i):
-            rep.error(rel, f"{i}: ID の形式が不正です（期待: {pattern}）")
+            rep.error(rel, f"{i}: ID の形式が不正です", f"{prefix}-001 のように {prefix}- + 3 桁以上の数字にする（{pattern}）", needle)
         if i in seen:
-            rep.error(rel, f"{i}: ID が重複しています")
+            rep.error(rel, f"{i}: ID が重複しています", "2 つ目以降を未使用の番号に振り直す（既存 ID は変えない）", needle)
         seen.add(i)
         if i not in body:
-            rep.error(rel, f"{i}: frontmatter にあるが本文に見出しがありません")
+            rep.soft(rel, f"{i}: frontmatter にあるが本文に見出しがありません",
+                     f"本文に「### {i}: タイトル」の見出しを追加する。分割して書く途中なら、ファイル末尾に {IN_PROGRESS_MARKER} を置くと完成まで WARN 扱いになる", needle)
         st = it.get("status")
         if st is not None and st not in STATUS_VALUES:
-            rep.error(rel, f"{i}: status は added|modified のみ（{st}）")
+            rep.error(rel, f"{i}: status は added|modified のみ（{st}）", "差分更新で追加した項目は added、変更した項目は modified。それ以外は status を書かない", needle)
+    # 本文にあるが frontmatter に無い ID
+    for m in re.finditer(r"^#{2,4}\s+(" + prefix + r"-\d{3,})\b", body, re.M):
+        if m.group(1) not in seen:
+            rep.soft(rel, f"{m.group(1)}: 本文に見出しがあるが frontmatter にありません",
+                     f"frontmatter の一覧に「- id: {m.group(1)}」を追加する", m.group(0))
     return seen
 
 
@@ -218,13 +258,14 @@ def check_covers(rep, rel, items, req_ids):
         if covers is None:
             continue
         if not isinstance(covers, list):
-            rep.error(rel, f"{it.get('id')}: covers はリストにしてください")
+            rep.error(rel, f"{it.get('id')}: covers はリストにしてください", "covers: [REQ-001, REQ-002] の形にする", f"id: {it.get('id')}")
             continue
         for c in covers:
             if not re.match(r"^REQ-\d{3,}$", str(c)):
-                rep.error(rel, f"{it.get('id')}: covers の値が REQ-NNN ではありません（{c}）")
+                rep.error(rel, f"{it.get('id')}: covers の値が REQ-NNN ではありません（{c}）", "要件定義書の frontmatter にある REQ-NNN を書く", f"id: {it.get('id')}")
             elif req_ids and str(c) not in req_ids:
-                rep.error(rel, f"{it.get('id')}: covers の {c} が doc/requirements/ に存在しません")
+                rep.error(rel, f"{it.get('id')}: covers の {c} が doc/requirements/ に存在しません",
+                          f"doc/requirements/*.md の frontmatter にある ID（{', '.join(sorted(req_ids)[:8])}{'…' if len(req_ids) > 8 else ''}）から選ぶ。新しい要件なら先に要件定義書へ追加する", f"id: {it.get('id')}")
 
 
 def check_implemented_by(rep, rel, items, project_dir):
@@ -233,16 +274,16 @@ def check_implemented_by(rep, rel, items, project_dir):
             continue
         ref = str(it["implemented_by"])
         if "::" not in ref:
-            rep.error(rel, f"{it.get('id')}: implemented_by は path::関数名 の形式にしてください（{ref}）")
+            rep.error(rel, f"{it.get('id')}: implemented_by は path::関数名 の形式にしてください（{ref}）", "例: pkg/auth/login_test.go::TestLogin_Success", f"id: {it.get('id')}")
             continue
         path, func = ref.split("::", 1)
         abs_path = os.path.join(project_dir, path)
         if not os.path.isfile(abs_path):
-            rep.error(rel, f"{it.get('id')}: implemented_by のファイルがありません: {path}")
+            rep.error(rel, f"{it.get('id')}: implemented_by のファイルがありません: {path}", "プロジェクトルートからの相対パスにする。まだテストが無いなら implemented_by を書かない", f"id: {it.get('id')}")
             continue
         with open(abs_path, encoding="utf-8", errors="replace") as fh:
             if func not in fh.read():
-                rep.error(rel, f"{it.get('id')}: implemented_by の {func} が {path} に見つかりません")
+                rep.error(rel, f"{it.get('id')}: implemented_by の {func} が {path} に見つかりません", "関数名・メソッド名をファイル内の定義と一致させる（大文字小文字も）", f"id: {it.get('id')}")
 
 
 def validate_doc(path, project_dir, rep):
@@ -255,17 +296,17 @@ def validate_doc(path, project_dir, rep):
         return
     declared = fm.get("doc_type")
     if declared and declared != dtype:
-        rep.error(rel, f"doc_type が {declared} ですがディレクトリは {dtype} です")
+        rep.error(rel, f"doc_type が {declared} ですがディレクトリは {dtype} です", f"doc_type: {dtype} にする", "doc_type:")
     list_key, pattern = ID_PATTERNS[dtype]
     items = fm.get(list_key)
     if items is None:
         if dtype == "infra-spec":
             rep.warn(rel, f"frontmatter に {list_key} がありません")
             return
-        rep.error(rel, f"frontmatter に {list_key} がありません")
+        rep.error(rel, f"frontmatter に {list_key} がありません", f"frontmatter に「{list_key}:」のリストを書き、各項目を「- id: {pattern.split('-')[0].lstrip('^')}-001」で始める")
         return
     if not isinstance(items, list):
-        rep.error(rel, f"{list_key} はリストにしてください")
+        rep.error(rel, f"{list_key} はリストにしてください", f"{list_key}: の下に「- id: …」を並べる")
         return
     ids = check_ids(rep, rel, items, pattern, body)
     if dtype != "requirements":
@@ -284,7 +325,7 @@ def validate_doc(path, project_dir, rep):
     if dtype == "api-spec":
         for it in items:
             if isinstance(it, dict) and (not it.get("method") or not it.get("path")):
-                rep.error(rel, f"{it.get('id')}: method と path は必須です")
+                rep.error(rel, f"{it.get('id')}: method と path は必須です", "method: POST / path: /auth/login のように書く", f"id: {it.get('id')}")
     return ids
 
 
@@ -292,22 +333,25 @@ def validate_checklist(path, project_dir, rep):
     rel = os.path.relpath(path, project_dir)
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
+    rep.text = text
+    rep.in_progress = False
     m = re.search(r"^## ステージ進捗\s*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
     if not m:
-        rep.error(rel, "「## ステージ進捗」セクションがありません")
+        rep.error(rel, "「## ステージ進捗」セクションがありません", "ファイル先頭に「## ステージ進捗」と 6 行の「- [ ] N. stage: 説明」を置く")
         return
     section = m.group(1)
     for n, stage in enumerate(STAGES, 1):
         if not re.search(rf"^- \[[ x]\] {n}\. {stage}:", section, re.M):
-            rep.error(rel, f"ステージ進捗に「- [ ] {n}. {stage}:」の行がありません")
+            rep.error(rel, f"ステージ進捗に「- [ ] {n}. {stage}:」の行がありません", "6 ステージ（requirements / spec / consistency / implementation / test / compliance）を番号付きで並べる")
     if re.search(r"^## フェーズ進捗", text, re.M):
-        rep.error(rel, "旧形式の「## フェーズ進捗」が残っています")
+        rep.error(rel, "旧形式の「## フェーズ進捗」が残っています", "「## ステージ進捗」に置き換える")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--project-dir", default=os.getcwd())
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--strict", action="store_true", help="書きかけマーカーを ERROR にする（--all では常に有効）")
     ap.add_argument("files", nargs="*")
     args = ap.parse_args()
     project_dir = os.path.abspath(args.project_dir)
@@ -323,7 +367,7 @@ def main():
         ap.print_usage()
         return 2
 
-    rep = Report()
+    rep = Report(strict=args.strict or args.all)
     for f in files:
         p = f if os.path.isabs(f) else os.path.join(project_dir, f)
         if not os.path.exists(p):

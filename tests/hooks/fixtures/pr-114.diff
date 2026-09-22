@@ -1,0 +1,12 @@
+diff --git a/backend/database/migrations/2026_09_22_000000_drop_legacy.php b/backend/database/migrations/2026_09_22_000000_drop_legacy.php
+--- /dev/null
++++ b/backend/database/migrations/2026_09_22_000000_drop_legacy.php
+@@ -0,0 +1,3 @@
++    public function up(): void {
++        DB::statement('DROP TABLE legacy_tasks');
++    }
+diff --git a/backend/tests/Feature/X.php b/backend/tests/Feature/X.php
+--- a/backend/tests/Feature/X.php
++++ b/backend/tests/Feature/X.php
+@@ -1,0 +2,1 @@
++    // "'; DROP TABLE tasks; --"

@@ -71,6 +71,7 @@ state.json は **compliance 完了後も削除しない**（`next_stage: "comple
 | `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | `doc-validate.sh` | frontmatter の ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出しの対応・`status` の値域・チェックリストの 6 行を検証。違反は exit 2 で差し戻す（writer は指摘どおり直して書き直す） |
 | `escalation_*.md` 生成後 | `state-sync.sh` | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` 設定時は Slack 通知 |
 | `stage-*-agent` 完了後 | `agent-complete.sh` | `flow.log` に完了・所要時間を記録。requirements 完了時は人間確認ゲートを念押し |
+| Agent 起動直後（数秒以内の PostToolUse） | `agent-complete.sh` | `agent_spawned` として記録するだけ。「完了」は最終回答 / task notification で判断する（pane 型は起動直後に PostToolUse が返るため） |
 | テストコード書き込み後 | `test-lint.sh` | skip・assert なし・空テスト・エラー握りつぶしは exit 2 で差し戻し。sleep / 現在時刻 / 乱数 / tautology は WARN |
 | test ステージでのテストファイル書き込み前 | `test-stage-guard.sh` | テストコード・テスト定義書への Write / Edit を `deny`（プロダクションコードだけ直す） |
 | `gh pr merge` 実行前 | `pr-merge-guard.sh` | 自動マージ条件（ベースブランチ・CI・コンフリクト・DB 破壊的変更・テスト削除/スキップ・`--merge`）を検証し、満たさなければ `deny`。`main` / `develop` 向けは常に拒否 |

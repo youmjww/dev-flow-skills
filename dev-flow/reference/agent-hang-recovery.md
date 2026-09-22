@@ -23,6 +23,12 @@ Agent 起動直後から、以下の基準でハングを判定する。
 3. fork は `run_in_background` を指定しなくても非同期でバックグラウンド実行される。完了は `task-notification` で通知されるので、`sleep` ポーリングはしない。
 4. fork でも同様にハングした場合（同じ検知手順で判定）、人間にエスカレーションする（`reference/escalation-format.md` の形式で報告し、環境側の問題である可能性を伝える）。
 
+**fork 起動時に落としてはいけないもの:**
+
+- **完了 JSON のフォーマット指示**。元のプロンプト末尾の「以下の JSON を最終回答として返す」ブロック（`status` / `result` / `confidence` / `uncertainty_points` / `needs_human_review` / `blockers`）をそのまま含める。実戦では fork 起動時に要約したプロンプトを渡した結果、implementer が自由テキストで報告し、オーケストレーターも JSON をパースせずに読み流したため、`uncertainty_points` にあった「Laravel 13 になった」「is_completed の判定を独自実装した」が人間ゲートに掛からなかった
+- **規約・環境ノート・memory の注入部分**（`{CONVENTIONS}` 等の展開済みテキスト）。要約せず、元のプロンプト全文を渡す
+- fork の最終回答を受け取ったら、オーケストレーターは**必ず** `needs_human_review` と `confidence` を確認し、`dev-flow/SKILL.md` STEP 5 の人間ゲート条件（`confidence < 0.5` または `needs_human_review = true`）を pane 型と同じく適用する。JSON が無い（自由テキスト）場合は `SendMessage` で「最終回答を指定の JSON 形式で返してください」と再要求する（1 回。それでも無ければ `needs_human_review = true` 相当として扱う）
+
 ## 適用範囲（重要な制約: fork は Agent ツールで子サブエージェントを起動できない）
 
 **fork（`subagent_type: "fork"`）で起動したエージェントは、その内部で `Agent` ツールをさらに呼び出すことができない**（ハードルールで禁止されている）。そのため fork フォールバックが使えるのは、**それ自身がさらに子サブエージェントを起動しない「末端の実行者」に限られる**：

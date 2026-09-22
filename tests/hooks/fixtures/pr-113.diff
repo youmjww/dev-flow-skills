@@ -1,0 +1,13 @@
+diff --git a/backend/tests/Feature/TaskApiTest.php b/backend/tests/Feature/TaskApiTest.php
+--- a/backend/tests/Feature/TaskApiTest.php
++++ b/backend/tests/Feature/TaskApiTest.php
+@@ -10,0 +11,4 @@
++    public function test_sql_injection_in_title_is_stored_as_plain_text(): void
++    {
++        $res = $this->postJson('/api/tasks', ['title' => "'; DROP TABLE tasks; --"]);
++        $res->assertStatus(201);
+diff --git a/src/api/tasks.test.ts b/src/api/tasks.test.ts
+--- a/src/api/tasks.test.ts
++++ b/src/api/tasks.test.ts
+@@ -1,0 +2,1 @@
++  it("escapes DELETE FROM tasks in title", () => { expect(esc("DELETE FROM tasks")).toBe("x"); });

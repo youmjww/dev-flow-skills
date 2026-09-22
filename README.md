@@ -382,6 +382,8 @@ dev-flow-skills/
 │   ├── reference/
 │   │   ├── plan-repair.md          # Plan Repair フロー詳細手順
 │   │   ├── recovery.md             # state.json とリモートの乖離からの復旧
+│   │   ├── integration-check.md    # STEP C.5 Dev + QA 統合検証の手順
+│   │   ├── merge-ops.md            # STEP G マージ運用（順序・UNKNOWN・deny 理由の分類）
 │   │   ├── conventions/            # 規約とレビューチェックリスト（testing は常時、go / python / typescript / react / nextjs / php / laravel は tech_stack で選択）
 │   │   └── agent-prompt-injection.md  # memory注入・ガードレール・昇格通知
 │   └── prompts/                    # エージェントプロンプト（チーム別）
