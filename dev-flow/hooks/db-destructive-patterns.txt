@@ -8,7 +8,10 @@ ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP[[:space:]]
 ALTER[[:space:]]+TABLE[^;]*(ALTER|MODIFY|CHANGE)[[:space:]]+COLUMN
 ALTER[[:space:]]+TABLE[^;]*[[:space:]]RENAME[[:space:]]
 ALTER[[:space:]]+TABLE[^;]*[[:space:]]TYPE[[:space:]]
-TRUNCATE[[:space:]]
+# TRUNCATE は SQL の文として成り立つ形だけを拾う（grep -i のため、Tailwind の `truncate` クラスなどと区別する）
+#   TRUNCATE [TABLE|ONLY] <テーブル名> の後に ; , 行末 RESTART CONTINUE CASCADE RESTRICT が続く形
+TRUNCATE[[:space:]]+(TABLE|ONLY)[[:space:]]
+TRUNCATE[[:space:]]+[A-Za-z0-9_."`]+[[:space:]]*(;|,|$|RESTART|CONTINUE|CASCADE|RESTRICT)
 # WHERE の無い DELETE FROM は pr-merge-guard.sh 側で別途判定（ERE では否定先読みが書けないため）
 
 # --- Rails / ActiveRecord ---

@@ -581,6 +581,18 @@ assert_eq "マイグレーションの DROP TABLE は deny（テストファイ�
 assert_contains "deny 理由にマイグレーション側の行" "$(reason "$out")" "legacy_tasks"
 assert_not_contains "deny 理由にテストファイル側の行は出ない" "$(reason "$out")" "'; DROP TABLE tasks"
 
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 115 --merge')")"
+assert_eq "Tailwind の truncate クラスは DB 破壊的変更と誤検知しない（allow）" "$(decision "$out")" "allow"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 116 --merge')")"
+assert_eq "TRUNCATE TABLE は deny" "$(decision "$out")" "deny"
+assert_contains "TRUNCATE TABLE の該当行を提示" "$(reason "$out")" "TRUNCATE TABLE tasks"
+
+out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 117 --merge')")"
+assert_eq "小文字の truncate <table>; と TRUNCATE \"t\" RESTART ... も deny" "$(decision "$out")" "deny"
+assert_contains "小文字の truncate の該当行を提示" "$(reason "$out")" "truncate users"
+assert_contains "引用符付きテーブル名の該当行を提示" "$(reason "$out")" "audit_logs"
+
 out="$(run_hook pr-merge-guard.sh "$dir" "$(bash_json 'gh pr merge 109 --merge')")"
 assert_eq "テスト関数の削除は deny" "$(decision "$out")" "deny"
 assert_contains "削除された関数名を提示" "$(reason "$out")" "TestLogin_WrongPassword"
