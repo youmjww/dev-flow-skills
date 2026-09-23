@@ -1,0 +1,3 @@
++++ b/migrations/004.sql
++truncate users;
++TRUNCATE "audit_logs" RESTART IDENTITY CASCADE;
