@@ -46,6 +46,17 @@ if [ "$STAGE" = "implementation" ] && [ "$(state_get '.implementation_progress.p
   fi
 fi
 
+# ローカルのブランチが origin より遅れていないか（fetch は 5 秒で打ち切る。失敗しても何も言わない）
+if [ "$STAGE" != "completed" ] && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  if command -v timeout >/dev/null 2>&1; then timeout 5 git -C "$PROJECT_DIR" fetch -q origin 2>/dev/null
+  else git -C "$PROJECT_DIR" fetch -q origin 2>/dev/null; fi
+  CUR="$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+  BEHIND="$(git -C "$PROJECT_DIR" rev-list --count "HEAD..origin/$CUR" 2>/dev/null || echo 0)"
+  if [ "${BEHIND:-0}" -gt 0 ]; then
+    echo "dev-flow 警告: ブランチ $CUR が origin/$CUR より $BEHIND コミット遅れています。テスト・レビュー・状況報告の前に git pull --ff-only してください。"
+  fi
+fi
+
 if [ -f "$FLOW_LOG" ]; then
   echo "dev-flow 最近のイベント:"
   tail -3 "$FLOW_LOG" | sed 's/^/  /'

@@ -635,5 +635,98 @@ assert_empty "Bash は対象外（pr-merge-guard が diff で拾う）" "$out"
 rm -rf "$dir"
 
 # ---------------------------------------------------------------------------
+# state-sync.sh: implementation → test のリモート確認ゲート
+# ---------------------------------------------------------------------------
+section "state-sync.sh: implementation → test ゲート"
+dir="$(new_project)"
+write_checklist "$dir"
+write_state "$dir" implementation
+run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)" >/dev/null
+write_state "$dir" test
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
+assert_eq "remote_verified 無しで test に進むと exit 2" "$(hook_rc)" "2"
+assert_contains "verify-remote-state.sh の実行を促す" "$(hook_err)" "verify-remote-state.sh --expect-merged"
+assert_not_contains "拒否した遷移は flow.log に記録しない" "$(cat "$dir/doc/process/flow.log")" "event=stage_transition stage=test"
+printf '2026-09-25T10:00:00+0900 event=remote_verified result=ng branch=feature/x ng=1 prs=101\n' >> "$dir/doc/process/flow.log"
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
+assert_eq "remote_verified が NG なら exit 2" "$(hook_rc)" "2"
+printf '2026-09-25T10:01:00+0900 event=remote_verified result=ok branch=feature/x prs=101\n' >> "$dir/doc/process/flow.log"
+out="$(run_hook state-sync.sh "$dir" "$(write_json doc/process/state.json)")"
+assert_eq "遷移後に OK が記録されていれば exit 0" "$(hook_rc)" "0"
+assert_contains "test への遷移が記録される" "$(cat "$dir/doc/process/flow.log")" "event=stage_transition stage=test prev=implementation"
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
+# verify-remote-state.sh
+# ---------------------------------------------------------------------------
+section "verify-remote-state.sh"
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
+vr_root="$(mktemp -d "${TMPDIR:-/tmp}/dev-flow-verify.XXXXXX")"
+git init -q --bare "$vr_root/origin.git"
+git clone -q "$vr_root/origin.git" "$vr_root/work" 2>/dev/null
+git clone -q "$vr_root/origin.git" "$vr_root/other" 2>/dev/null
+( cd "$vr_root/work" && git checkout -q -b feature/x && mkdir -p doc/process && echo a > a && git add a && git commit -qm a && git push -q origin feature/x 2>/dev/null )
+vr() {
+  ( cd "$vr_root/work" && CLAUDE_PROJECT_DIR="$vr_root/work" PATH="$FIXTURES:$PATH" GH_FIXTURE_DIR="$FIXTURES" \
+      "$HOOKS/verify-remote-state.sh" "$@" ) 2>&1
+}
+out="$(vr 101)"; rc=$?
+assert_contains "同期済みブランチは OK" "$out" "OK   branch feature/x: origin/feature/x と同期"
+assert_contains "CI 成功の OPEN PR は OK" "$out" "OK   PR #101: state=OPEN checks=1/1"
+assert_contains "NG 0" "$out" "summary: NG 0"
+assert_contains "OK が flow.log に記録" "$(cat "$vr_root/work/doc/process/flow.log")" "event=remote_verified result=ok"
+out="$(vr --expect-merged 101 120)"
+assert_contains "--expect-merged で未マージは NG" "$out" "NG   PR #101: state=OPEN checks=1/1 成功 https://github.com/o/r/pull/101 未マージ"
+assert_contains "マージ済みは OK" "$out" "OK   PR #120: state=MERGED"
+out="$(vr 103)"
+assert_contains "CI 失敗は NG（チェック名付き）" "$out" "失敗: ci=FAILURE"
+out="$(vr 121)"
+assert_contains "CI 実行中は NG（推測で書かせない）" "$out" "未完了: ci"
+( cd "$vr_root/other" && git fetch -q origin && git checkout -q feature/x && echo b > b && git add b && git commit -qm b && git push -q origin feature/x 2>/dev/null )
+out="$(vr)"
+assert_contains "origin より遅れていれば NG" "$out" "NG   branch feature/x: origin/feature/x より 1 コミット遅れている"
+assert_contains "NG が flow.log に記録" "$(tail -1 "$vr_root/work/doc/process/flow.log")" "event=remote_verified result=ng"
+( cd "$vr_root/work" && CLAUDE_PROJECT_DIR="$vr_root/work" "$HOOKS/verify-remote-state.sh" >/dev/null 2>&1 ); rc=$?
+assert_eq "NG があれば exit 1" "$rc" "1"
+rm -rf "$vr_root"
+
+# ---------------------------------------------------------------------------
+# test-lint: シェル（インフラの結合テスト）
+# ---------------------------------------------------------------------------
+section "test-lint: シェル"
+dir="$(new_project)"
+mkdir -p "$dir/tests"
+for f in nginx_test.sh proxy.bats; do
+  cp "$TL/good/$f" "$dir/tests/$f"
+  out="$(run_hook test-lint.sh "$dir" "$(write_json "tests/$f")")"
+  assert_eq "正しい tests/$f は exit 0" "$(hook_rc)" "0"
+  cp "$TL/bad/$f" "$dir/tests/$f"
+  out="$(run_hook test-lint.sh "$dir" "$(write_json "tests/$f")")"
+  assert_eq "違反のある tests/$f は exit 2" "$(hook_rc)" "2"
+done
+out="$(python3 "$HOOKS/test-lint.py" "$TL/bad/nginx_test.sh" "$TL/bad/proxy.bats" || true)"
+for r in self-compare grep-count-lines restore-trap restore-warn-only ipv4-only deterministic no-skip assert-present empty-test; do
+  assert_contains "  ルール test/$r" "$out" "test/$r"
+done
+out="$(python3 "$HOOKS/test-lint.py" "$TL/good/nginx_test.sh" "$TL/good/proxy.bats")"
+assert_contains "good のシェルは 0 errors, 0 warnings" "$out" "summary: 0 errors, 0 warnings"
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
+# doc-validate: 未カバー REQ の WARN
+# ---------------------------------------------------------------------------
+section "doc-validate: 未カバー REQ"
+dir="$(new_project)"; cp -R "$SAMPLE/." "$dir/"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_eq "未カバーは WARN なので exit 0" "$(hook_rc)" "0"
+assert_contains "テスト定義書から漏れた REQ を通知" "$(reason "$out")" "テスト定義書（doc/test-spec/）のどの covers にも無い REQ があります: REQ-005"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/api-spec/auth.md)")"
+assert_contains "仕様書から漏れた REQ を通知" "$(reason "$out")" "仕様書（doc/infra-spec/ ・ doc/api-spec/）のどの covers にも無い REQ があります: REQ-005"
+sed -i.bak 's/covers: \[REQ-004\]/covers: [REQ-004, REQ-005]/' "$dir/doc/test-spec/auth.md"
+out="$(run_hook doc-validate.sh "$dir" "$(write_json doc/test-spec/auth.md)")"
+assert_not_contains "全 REQ をカバーすれば WARN は出ない" "$(reason "$out")" "covers にも無い REQ"
+rm -rf "$dir"
+
+# ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
