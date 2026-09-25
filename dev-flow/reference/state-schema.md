@@ -77,6 +77,7 @@
 | `tech_stack` | 言語・フレームワーク等。spec 以降のサブエージェントが参照。`language_version` / `framework_version` は規約のバージョン照合（`dev-flow-implementation/reference/conventions/version-check.md`）に使う。requirements / bootstrap がマニフェスト（`go.mod` / `package.json` / `composer.json` / `pyproject.toml`）から検出する |
 | `is_gui/is_api/is_infra/is_e2e` | 対応する生成物・テストを有効化するフラグ |
 | `implementation_progress` | implementation 実行中のみ存在。完了時に削除 |
+| `base_branch` | implementation の PR をマージしたベースブランチ（`feature/*`）。implementation 完了時に `implementation_progress.base_branch` から写す。test / compliance が「origin の最新に揃えてからテストする」ために使う（`dev-flow-test/SKILL.md` STEP 0.5） |
 | `implementation_progress.pr_numbers` | 各グループの PR 番号の**配列**（Infra/App は 2 本、Cross は 4 本）。PR 作成後に stage-implementation-agent が書き込む。`completed_groups` に含まれないグループの番号が「マージ待ち」を表す |
 | `agent_hierarchy` | 階層深さ監視。max_depth=4 を超えたらエスカレーション |
 | `harness` | 再現性メタデータ。requirements 開始時に追加、各ステージ完了時に stage_history を更新 |

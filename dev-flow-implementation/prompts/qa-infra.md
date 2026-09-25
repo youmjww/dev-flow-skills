@@ -36,7 +36,9 @@ baseline_commit: `{BASELINE_COMMIT}`
 - **あなたが書くのは仕様テスト（ブラックボックス）**。テスト定義書の TC-NNN を 1 つずつ、エンドポイント（HTTP 経由）・画面（App 全体をレンダリング）・E2E の粒度で実装する。置き場は規約 `testing.md` の「Dev と QA のテスト分担」の表（Laravel: `tests/Feature/**`、React: `src/App.test.tsx`、E2E: `e2e/**`）。**実装の内部関数・クラス単体のユニットテスト（`tests/Unit/**`、`src/components/X.test.tsx` 等）は書かない**。それは Dev implementer が自分の worktree で分岐網羅して書いている。あなたの worktree には Dev の実装が無いので、内部構造を前提にしたテストは書けないし書かなくてよい
 - エンドポイント・画面ごとに異常系（不正入力・存在しない ID・依存先の失敗）を最低 1 つ。テスト定義書に異常系の TC が無ければ TC を**追加**（`status: added`）してから実装する。Dev から `uncertainty_points` で「TC 不足: {関数}: {分岐条件}」の申告があれば、それも TC として追加する
 
-- テストファイルを Write すると hook（`test-lint.py`）が静的検証する。「テストコード規約に違反」のフィードバックが返ったら ERROR をすべて直して**同じファイルを書き直す**（テストを減らして通す方向は禁止）。WARN（sleep / 現在時刻 / 乱数 / tautology）は該当箇所を直すか、正当な理由を完了 JSON の `uncertainty_points` に書く
+- テストファイルを Write すると hook（`test-lint.py`）が静的検証する。「テストコード規約に違反」のフィードバックが返ったら ERROR をすべて直して**同じファイルを書き直す**（テストを減らして通す方向は禁止）。WARN（sleep / 現在時刻 / 乱数 / tautology、シェルの grep -c / trap の無い復元 / WARN だけの失敗 / IPv4 限定の照合）は該当箇所を直すか、正当な理由を完了 JSON の `uncertainty_points` に書く
+
+- **ミューテーション確認は統合検証のときに行う**。あなたの worktree には Dev の実装が無いので、ここではできない。STEP C.5 でオーケストレーターが Dev ブランチを検証用マージした後に `SendMessage` で依頼するので、そのとき仕様テストごとに実装を 1 か所壊してテストが落ちることを確かめ、元に戻し、`result.mutation` を返す（規約 `testing.md`「ミューテーション確認」）。初回の完了 JSON では `"mutation": []` でよい
 
 **1. タスクを1件選んでテストコードを生成する**
 - テスト定義書の該当ケースを `{TECH_STACK.test_framework}` で実装する
@@ -71,6 +73,7 @@ baseline_commit: `{BASELINE_COMMIT}`
     "changed_files": {変更ファイル数},
     "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
     "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0},
+    "mutation": [],
     "tests": {"command": "./vendor/bin/pest tests/Feature", "passed": 5, "failed": 32, "note": "失敗は Dev 実装待ち（全て 404）。セットアップ起因の失敗なし"}
   },
   "confidence": 0.85,
@@ -79,6 +82,8 @@ baseline_commit: `{BASELINE_COMMIT}`
   "blockers": []
 }
 ```
+
+**レビュー指摘の修正で再開された場合**は、渡された `findings` の 1 件ごとに `result.review_responses` に `{"rule": "...", "file": "...", "action": "fixed | not_fixed", "detail": "どう直したか / 直さなかった理由"}` を書く。blocker / major を `not_fixed` にするなら理由は必須（再レビューでレビュアーが判断する）。
 
 ブロッカー発生時は `status: "blocked"` の JSON を最終回答として返す（その場で作業を止める）:
 

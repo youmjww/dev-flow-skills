@@ -330,7 +330,7 @@ implementation 中にエージェントが「計画誤り」を検出した場�
 
 #### 言語・フレームワーク別の規約とレビューチェックリスト
 
-`dev-flow-implementation/reference/conventions/` に Go / Python / TypeScript / React / Next.js / PHP / Laravel の規約を置き、`tech_stack` から言語 → フレームワーク → `doc/conventions.md`（プロジェクト固有、最優先）の順に選んで注入します。各ファイルは公式ドキュメントの出典と検証済みバージョンを持ち、バージョンで変わる項目（Next.js のキャッシュ既定値や `await params`、Laravel 11 の骨格変更など）には `[version-sensitive]`、公式ではない推奨には `[opinion]` の印があります。プロジェクトの実バージョンが違う場合は、implementation の前に公式ドキュメントを WebFetch して差分を `doc/process/conventions_verified.md` に書き出し（バージョンが変わるまでキャッシュ）、規約ファイルより優先して注入します。言語横断の `testing.md` は常に注入され、テストの削除・スキップ禁止（`test/no-delete` / `test/no-skip` は blocker、PR マージ時に hook が diff から検出）、公開関数ごとの異常系必須、`if` / `switch` / 早期 return の分岐ごとの TC（`test/branch-coverage`、Dev レビューでも照合）、分岐カバレッジの閾値ゲート（既定 80%、`doc/conventions.md` で変更）を定めます。implementer には「書き方」、reviewer には「レビューチェックリスト」（ルール ID + 重大度 + 確認方法）が渡り、レビュー結果は `{severity, rule, file, line, problem, fix}` の JSON で返ります。blocker / major は修正必須、minor は記録のみ。同じ `rule` が 3 回出たら memory に保存して次回から冒頭に注入します。lint / format / 型検査の終了コードは完了 JSON に必須で、0 以外はレビューに進みません。既存プロジェクトでは bootstrap が `doc/conventions.md` の草案をコードから起こします。
+`dev-flow-implementation/reference/conventions/` に Go / Python / TypeScript / React / Next.js / PHP / Laravel / シェルの規約を置き、`tech_stack` から言語 → フレームワーク → `doc/conventions.md`（プロジェクト固有、最優先）の順に選んで注入します。各ファイルは公式ドキュメントの出典と検証済みバージョンを持ち、バージョンで変わる項目（Next.js のキャッシュ既定値や `await params`、Laravel 11 の骨格変更など）には `[version-sensitive]`、公式ではない推奨には `[opinion]` の印があります。プロジェクトの実バージョンが違う場合は、implementation の前に公式ドキュメントを WebFetch して差分を `doc/process/conventions_verified.md` に書き出し（バージョンが変わるまでキャッシュ）、規約ファイルより優先して注入します。言語横断の `maintainability.md`（車輪の再発明をしない・業務ルールの重複を作らない・ドメインごとの独立・循環依存なし。`maint/*`）と `testing.md` は常に注入され、テストの削除・スキップ禁止（`test/no-delete` / `test/no-skip` は blocker、PR マージ時に hook が diff から検出）、公開関数ごとの異常系必須、`if` / `switch` / 早期 return の分岐ごとの TC（`test/branch-coverage`、Dev レビューでも照合）、分岐カバレッジの閾値ゲート（既定 80%、`doc/conventions.md` で変更）、書いた本人によるミューテーション確認（テストごとに実装を 1 か所壊して落ちることを確かめる。`test/mutation-checked`）を定めます。implementer には「書き方」、reviewer には「レビューチェックリスト」（ルール ID + 重大度 + 確認方法）が渡り、レビュー結果は `{severity, rule, file, line, problem, fix}` の JSON で返ります。blocker / major は修正必須、minor は記録のみ。同じ `rule` が 3 回出たら memory に保存して次回から冒頭に注入します。lint / format / 型検査の終了コードは完了 JSON に必須で、0 以外はレビューに進みません。既存プロジェクトでは bootstrap が `doc/conventions.md` の草案をコードから起こします。
 
 #### レビュアー独立性
 
@@ -384,7 +384,7 @@ dev-flow-skills/
 │   │   ├── recovery.md             # state.json とリモートの乖離からの復旧
 │   │   ├── integration-check.md    # STEP C.5 Dev + QA 統合検証の手順
 │   │   ├── merge-ops.md            # STEP G マージ運用（順序・UNKNOWN・deny 理由の分類）
-│   │   ├── conventions/            # 規約とレビューチェックリスト（testing は常時、go / python / typescript / react / nextjs / php / laravel は tech_stack で選択）
+│   │   ├── conventions/            # 規約とレビューチェックリスト（testing / maintainability は常時、go / python / typescript / react / nextjs / php / laravel / shell は tech_stack で選択）
 │   │   └── agent-prompt-injection.md  # memory注入・ガードレール・昇格通知
 │   └── prompts/                    # エージェントプロンプト（チーム別）
 │       ├── dev-infra.md            # Infra Dev（推論トレース・JSON通知）
@@ -452,13 +452,13 @@ dev-flow-skills/
 | タイミング | 自動で行うこと |
 |---|---|
 | `stage-*-agent` 起動前 | プランモードでないこと・下流スキルの存在・`state.json` の妥当性・階層深さ・ステージとエージェントの対応・同一ステージの再実行回数を検証。違反時は起動を止める |
-| `state.json` 書き込み後 | JSON 検証・`next_stage` / `kind` の値域検証（違反は差し戻し）、`task_checklist.md` のステージ進捗を同期、`flow.log` に遷移を記録 |
-| テストコード書き込み後 | 静的検証（`test-lint.py`）。skip・assert なし・空テスト・エラー握りつぶしは差し戻し、sleep / 現在時刻 / 乱数 / tautology は警告 |
-| `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | frontmatter のスキーマ検証（ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出し・`status` 値域）。違反は差し戻し |
+| `state.json` 書き込み後 | JSON 検証・`next_stage` / `kind` の値域検証（違反は差し戻し）、`task_checklist.md` のステージ進捗を同期、`flow.log` に遷移を記録。implementation → test は `verify-remote-state.sh`（PR のマージ・CI・ブランチの同期を確認するスクリプト）が直前に OK でなければ差し戻す |
+| テストコード書き込み後 | 静的検証（`test-lint.py`）。skip・assert なし・空テスト・エラー握りつぶし・（シェル）同じ値どうしの比較は差し戻し、sleep / 現在時刻 / 乱数 / tautology・（シェル）`grep -c`・trap の無い復元・IPv4 限定の照合は警告 |
+| `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | frontmatter のスキーマ検証（ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出し・`status` 値域）。違反は差し戻し。どの `covers` にも無い REQ は警告 |
 | `escalation_*.md` 生成後 | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` を設定していれば Slack に通知（未設定なら通信なし） |
 | `stage-*-agent` 完了後 | 所要時間を `flow.log` に記録。requirements 完了時は人間確認ゲートを念押し |
 | `gh pr merge` 実行前 | 自動マージ条件を検証。`feature/*` 向けの作業ブランチ PR で、CI 全通過・コンフリクトなし・DB 破壊的変更なし・`--merge` 方式のときだけ許可。`main` / `develop` 向けは常に拒否 |
-| セッション開始 / 応答完了 | 進行中フローの次ステージとアクションを表示 |
+| セッション開始 / 応答完了 | 進行中フローの次ステージとアクションを表示。ブランチが origin より遅れていれば警告 |
 
 dev-flow を使っていないプロジェクト（`doc/process/state.json` がない、`stage-*-agent` を起動しない）では何もしません。詳細・単体テスト方法は [`dev-flow/hooks/README.md`](dev-flow/hooks/README.md) を参照してください。
 

@@ -42,10 +42,12 @@ find {MAIN_DIR} -type f \( -name "*.tf" -o -name "*.py" -o -name "*.ts" -o -name
 **1. タスクを1件選んで実装する**
 - `{TECH_STACK.language}` / `{TECH_STACK.framework}` で実装する
 - 既存コードのスタイル・規約に従う
+- **書く前に探す**（規約 `maintainability.md`）: 新しい関数・ヘルパー・定数を書く前に、プロジェクト内の既存コード（`grep -rn` で関数名・特徴的なキーワード・似たリテラル）→ フレームワーク → 標準ライブラリ → 既存の依存の順に、同じことをするものが無いか探す。あれば使う。同じ業務ルール・検証条件を 2 か所目に書かない。他ドメインの内部（テーブル・内部モデル）に直接触れず、公開インターフェースを経由する
 - **以下の規約を守る**（言語・フレームワーク・プロジェクトの順。矛盾する場合は後のものが優先）：
 {CONVENTIONS}
 - テスト定義書を参照し、テストから呼び出しやすいインターフェース設計にする
 - **自分が書いた関数・クラス・コンポーネントのユニットテストを書く**（規約 `testing.md` の「Dev と QA のテスト分担」「書き方（Dev implementer 向け）」に従う）。置き場は実装と対（Laravel: `tests/Unit/**`、React: `src/**/X.test.tsx`、Go: `x_test.go`）。分岐（`if` / `switch` / 早期 return / `catch` / 三項演算子）ごとに 1 ケース、境界値を含める。出力の**形式**（日時フォーマット・レスポンスのラップ）も検証する
+- **ミューテーション確認**: 書いた・変えたテストごとに、そのテストが検出するはずの壊し方で実装を 1 か所壊してテストが落ちることを確かめ、元に戻す（規約 `testing.md`「ミューテーション確認」。壊した状態はコミットしない）。落ちなかったらテストを強化する。結果を完了 JSON の `result.mutation` に書く
 - **テスト定義書の TC-ID に対応する仕様テスト（Feature / App 結合 / E2E。`tests/Feature/**` `src/App.test.tsx` `e2e/**` 等）は書かない**。それは QA implementer が別 worktree で並行して書いている。Dev 側でも書くと同じパスのファイルが両ブランチに生まれてマージ時にコンフリクトする（実例: Dev/QA 双方が `tests/Feature/TaskApiTest.php` を作成）。エンドポイント全体の動作確認が必要なら `php artisan tinker` / `curl` / コミットしない一時スクリプトで行う
 - 追加した分岐のうち「これは仕様レベルの TC としてテスト定義書にあるべき」と思うものがあれば、完了 JSON の `uncertainty_points` に「TC 不足: {関数}: {分岐条件}」として申告する（QA が TC を追加する）。ユニットテストで自分がカバーしていれば申告不要
 
@@ -120,7 +122,8 @@ Tests: TC-001, TC-002
     "commits": ["{コミットハッシュ1}", "{コミットハッシュ2}"],
     "lint": {"command": "golangci-lint run ./... && gofmt -l .", "exit_code": 0},
     "unit_tests": {"command": "go test ./pkg/...", "passed": 12, "failed": 0},
-    "coverage": {"kind": "branch", "value": 0.87, "changed_functions_below_threshold": []}
+    "coverage": {"kind": "branch", "value": 0.87, "changed_functions_below_threshold": []},
+    "mutation": [{"test": "TestParseAllowList_IPv4Mapped", "mutation": "::ffff: の除去処理を削除", "killed": true}]
   },
   "confidence": 0.85,
   "uncertainty_points": [
@@ -136,6 +139,8 @@ Tests: TC-001, TC-002
   "blockers": []
 }
 ```
+
+**レビュー指摘の修正で再開された場合**は、渡された `findings` の 1 件ごとに `result.review_responses` に `{"rule": "...", "file": "...", "action": "fixed | not_fixed", "detail": "どう直したか / 直さなかった理由"}` を書く。blocker / major を `not_fixed` にするなら理由は必須（再レビューでレビュアーが判断する）。
 
 ブロッカー発生時は `status: "blocked"` の JSON を最終回答として返す（その場で作業を止める）:
 

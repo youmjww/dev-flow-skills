@@ -67,17 +67,37 @@ state.json は **compliance 完了後も削除しない**（`next_stage: "comple
 | タイミング | hook | オーケストレーターへの影響 |
 |---|---|---|
 | `stage-*-agent` 起動前 | `pre-agent-check.sh` | 下流スキル欠損・state.json 不正・階層深さ超過は `deny`、ステージとエージェントの不一致・同一ステージ 5 回以上は `ask` で止まる。STEP 1.2 / 3.5 の検証を機械的に補完 |
-| `state.json` 書き込み後 | `state-sync.sh` | JSON 不正・`next_stage` / `kind` の値域外なら exit 2 で差し戻し。`task_checklist.md` の「ステージ進捗」を `next_stage` に同期（STEP 5-2 の自動化）。`flow.log` に遷移を記録 |
-| `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | `doc-validate.sh` | frontmatter の ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出しの対応・`status` の値域・チェックリストの 6 行を検証。違反は exit 2 で差し戻す（writer は指摘どおり直して書き直す） |
+| `state.json` 書き込み後 | `state-sync.sh` | JSON 不正・`next_stage` / `kind` の値域外なら exit 2 で差し戻し。implementation → test は、直前に `verify-remote-state.sh` が OK を記録していなければ exit 2。`task_checklist.md` の「ステージ進捗」を `next_stage` に同期（STEP 5-2 の自動化）。`flow.log` に遷移を記録 |
+| `doc/{requirements,test-spec,api-spec,infra-spec}/*.md`・`task_checklist.md` 書き込み後 | `doc-validate.sh` | frontmatter の ID 形式・重複・`covers` の REQ 実在・`implemented_by` の関数実在・本文見出しの対応・`status` の値域・チェックリストの 6 行を検証。違反は exit 2 で差し戻す（writer は指摘どおり直して書き直す）。要件定義書の REQ がテスト定義書 / 仕様書のどの `covers` にも無ければ WARN |
 | `escalation_*.md` 生成後 | `state-sync.sh` | `flow.log` に記録。`DEV_FLOW_SLACK_CHANNEL` 設定時は Slack 通知 |
 | `stage-*-agent` 完了後 | `agent-complete.sh` | `flow.log` に完了・所要時間を記録。requirements 完了時は人間確認ゲートを念押し |
 | Agent 起動直後（数秒以内の PostToolUse） | `agent-complete.sh` | `agent_spawned` として記録するだけ。「完了」は最終回答 / task notification で判断する（pane 型は起動直後に PostToolUse が返るため） |
-| テストコード書き込み後 | `test-lint.sh` | skip・assert なし・空テスト・エラー握りつぶしは exit 2 で差し戻し。sleep / 現在時刻 / 乱数 / tautology は WARN |
+| テストコード書き込み後 | `test-lint.sh` | skip・assert なし・空テスト・エラー握りつぶし・（シェル）同じ値どうしの比較は exit 2 で差し戻し。sleep / 現在時刻 / 乱数 / tautology、（シェル）`grep -c`・trap の無い復元・WARN だけの失敗・IPv4 限定の照合は WARN |
 | test ステージでのテストファイル書き込み前 | `test-stage-guard.sh` | テストコード・テスト定義書への Write / Edit を `deny`（プロダクションコードだけ直す） |
 | `gh pr merge` 実行前 | `pr-merge-guard.sh` | 自動マージ条件（ベースブランチ・CI・コンフリクト・DB 破壊的変更・テスト削除/スキップ・`--merge`）を検証し、満たさなければ `deny`。`main` / `develop` 向けは常に拒否 |
-| セッション開始 / 応答完了 | `session-start.sh` / `stop-summary.sh` | 進行中フローの次ステージとアクションを表示 |
+| セッション開始 / 応答完了 | `session-start.sh` / `stop-summary.sh` | 進行中フローの次ステージとアクションを表示。ブランチが origin より遅れていれば警告 |
+| 状況報告・ステージ移行の前（hook ではなく Bash から呼ぶ） | `verify-remote-state.sh` | `git fetch` してブランチの ahead / behind、PR の state と CI の結果を 1 行ずつ OK / NG で出す。下の「状況報告のルール」を参照 |
 
 hook からの `additionalContext` に「task_checklist.md のステージ進捗は自動同期済み」とあれば STEP 5-2 の Edit をスキップする。`deny` / `ask` された場合は理由を人間に伝え、勝手に回避策を取らない。
+
+**`gh pr merge` が deny されたとき:** 同じコマンドを再試行しない（条件が変わらない限り結果は同じ）。deny 理由を読み、CI 未完了なら完了を待ってから 1 回だけ再試行、CI 失敗・コンフリクト・main 向けなど条件を満たせないものは「人間マージ待ち」として PR URL と deny 理由を人間に 1 回提示する。人間から「マージしてよい」と明示された場合も、hook の条件は緩まないので人間自身にマージしてもらう。
+
+---
+
+## 状況報告のルール
+
+人間やエージェントに「完了」「パス」「CI 実行中」「マージ済み」「テストは存在する」と伝える前に、**その場で実際の状態を確認し、確認したコマンドの出力を報告に引用する**。記憶・推測・サブエージェントの自己申告だけで書かない。実戦で、すでに失敗していた CI を「まだ実行中」と報告した、origin より 44 コミット遅れたブランチで「全件パス」と報告した、存在しないテストを「全グループ分ある」と報告した、という誤りを人間が訂正した。
+
+| 言いたいこと | 先に実行するもの |
+|---|---|
+| PR・CI の状態、ブランチの同期 | `~/.claude/skills/dev-flow/hooks/verify-remote-state.sh [--expect-merged] [PR番号...]`（出力の OK / NG 行を貼る） |
+| CI が失敗した理由 | `gh run view <run-id> --log-failed`（コード起因か環境起因か分けて書く） |
+| テストが通った | テストコマンドの実行結果の件数行（`Tests: 65 passed` 等）。ブランチが origin と同期していることを先に確認する |
+| テスト・ファイルが存在する | `git ls-files <パス>` / `grep -rn 'TC-0NN'` の結果 |
+| ステージ・グループが完了した | 上の確認と、`state.json` の該当フィールド（`jq`） |
+
+- CI が未完了なら「未完了」と書き、結果を予想しない。待つ場合は `sleep` せず、次回 `/dev-flow` で再確認する
+- サブエージェントのレビュー指摘を別のエージェントに渡すときは、要約せず JSON のまま全件渡す（`dev-flow-implementation/SKILL.md`「レビュー指摘の渡し方」）
 
 ---
 

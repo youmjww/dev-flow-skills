@@ -55,6 +55,28 @@ Dev と QA は別 worktree で並行して書く。**同じ種類のテストを
 - `assert true` / assert の無いテスト / `try { ... } catch {}` で例外を握りつぶすテストを書かない
 - `sleep` でタイミングを合わせない。非同期は完了を待つ仕組み（`waitFor` / channel / `Eventually`）で
 
+## ミューテーション確認（提出前の自己検証）
+
+テストが通ることは、テストが**バグを検出できる**ことの証明にならない（常に通るテストも通る）。新しく書いた・変えたテストごとに、**そのテストが検出するはずの壊し方で実装を 1 か所壊し、テストが失敗することを確かめてから元に戻す**。実戦では、レビュアーがこの手順で「常に真の比較」「行数を数えていた `grep -c`」「WARN だけ出して通る復元処理」を見つけて 3〜4 往復の差し戻しになっていた。書いた本人が先にやれば 1 往復で済む。
+
+| 誰が | どこで | いつ |
+|---|---|---|
+| Dev implementer | 自分の worktree（実装がある） | 完了 JSON を返す前 |
+| QA implementer | STEP C.5 の統合検証で Dev ブランチを検証用マージした QA worktree（自分の worktree には実装が無い） | オーケストレーターが統合テスト全パスの後に `SendMessage` で依頼したとき |
+
+壊し方の例: 条件の反転（`>` → `>=`、`!` の除去）、境界値の ±1、早期 return の削除、例外を投げずに握りつぶす、設定ファイルの 1 行削除（nginx の `allow` 行、`server_tokens off`）、ポート番号・`max_fails` の変更、パッケージのバージョン固定の変更。
+
+- 壊したら**そのテストだけ**を実行し、失敗することを確認する。元に戻す（`git checkout -- <file>` / `git stash`）。**壊した状態をコミットしない**
+- テストが失敗しなかった（変異が生き残った）ら、テストを強化する。期待値をリテラルにする、検証対象を狭める、観測点を変える
+- 結果を完了 JSON の `result.mutation` に書く。reviewer はここから 1〜2 件を選んで再現する：
+
+```json
+"mutation": [
+  {"test": "TC-068", "mutation": "restore() から systemctl start nginx を削除", "killed": true},
+  {"test": "TestParseAllowList_IPv4Mapped", "mutation": "::ffff: の除去処理を削除", "killed": true}
+]
+```
+
 ## レビューチェックリスト（Dev reviewer と QA reviewer で分担。「担当」列を見る）
 
 担当の凡例: **Dev** = Dev worktree のユニットテストを Dev reviewer が見る / **QA** = QA worktree の仕様テストを QA reviewer が見る / **両方** = それぞれの worktree で各 reviewer が見る。
@@ -78,6 +100,12 @@ Dev と QA は別 worktree で並行して書く。**同じ種類のテストを
 | `test/independent` | major | — | 順序依存・共有可変状態・グローバルに依存していない | 単体で実行して通るか、並列実行フラグ |
 | `test/deterministic` | major | hook（Write 時、warn） | 時刻・乱数・実ネットワーク・`sleep` に依存していない | hook の WARN を確認し、正当な例外（タイムアウトのテスト等）か判断 |
 | `test/error-type` | major | — | 異常系が「エラーになる」ではなくエラーの種類・コードを検証している | `assert.Error` だけで終わっていないか |
+| `test/mutation-checked` | major | — | **両方**: 新しく書いた・変えたテストごとに `result.mutation` があり、すべて `killed: true` | `result.mutation` から 1〜2 件選び、同じ壊し方で実装を壊してテストが落ちることを再現する（再現後は必ず元に戻す）。欠けていれば差し戻す |
+| `test/self-compare` | major | hook（Write 時、error） | 同じ値どうしを比較していない（`[ "$x" = "$x" ]` 等、常に真） | hook が exit 2 済み |
+| `test/grep-count-lines` | major | hook（Write 時、warn） | 出現回数を `grep -c`（一致した行数）で数えていない | hook の WARN を確認し、1 行に複数回出うる値なら `grep -o … \| wc -l` を要求 |
+| `test/restore-trap` | major | hook（Write 時、warn） | 状態を壊す操作（サービス停止・設定の書き換え）の前に `trap … EXIT` / `teardown` で復元している | hook の WARN と、該当操作の周辺 |
+| `test/restore-warn-only` | major | hook（Write 時、warn） | 復元・検証の失敗を WARN 表示だけで流していない | hook の WARN。失敗はテスト失敗（exit 1）にさせる |
+| `test/ipv4-only` | minor | hook（Write 時、warn） | アドレスの照合が IPv4 射影 IPv6（`::ffff:`）を取りこぼさない | hook の WARN と、対象サービスが IPv6 で待ち受けるか |
 | `test/side-effects` | minor | — | 副作用（DB・通知・イベント）が検証されている | 変更系の処理に `assertDatabaseHas` 相当 |
 | `test/tc-id` | minor | — | テストに TC-ID が対応付けられている | `grep -c 'TC-[0-9]'` |
 | `test/naming` | minor | — | テスト名から条件と期待結果が読める | 目視 |
@@ -118,3 +146,4 @@ Dev と QA は別 worktree で並行して書く。**同じ種類のテストを
 | テストを消す・スキップするのは最終手段 | — | DocDD の「ドキュメントが正解・コードを直す」から導かれる本フロー固有のルール |
 | `sleep` ではなく完了待ち | https://testing-library.com/docs/dom-testing-library/api-async/ 、https://pkg.go.dev/github.com/stretchr/testify/assert#Eventually | |
 | カバレッジ閾値 80% | — | `[opinion]`。`doc/conventions.md` の `coverage_threshold` で変更 |
+| ミューテーション確認 | https://en.wikipedia.org/wiki/Mutation_testing | ツール（Stryker / mutmut / Infection 等）を入れず、書いた本人が手で 1 件ずつ行う簡易版 |
