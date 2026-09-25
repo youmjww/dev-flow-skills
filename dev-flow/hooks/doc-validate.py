@@ -222,6 +222,46 @@ def collect_req_ids(project_dir):
     return ids
 
 
+def collect_covers(project_dir, dtypes):
+    """dtypes のディレクトリ（doc/<dtype>/*.md）の全項目の covers を集める。"""
+    covered = set()
+    for dtype in dtypes:
+        list_key = ID_PATTERNS[dtype][0]
+        for p in glob.glob(os.path.join(project_dir, "doc", dtype, "*.md")):
+            with open(p, encoding="utf-8") as fh:
+                fm_src, _ = split_frontmatter(fh.read())
+            if fm_src is None:
+                continue
+            try:
+                fm = parse_yaml_subset(fm_src)
+            except ValueError:
+                continue
+            for it in fm.get(list_key) or []:
+                if isinstance(it, dict) and isinstance(it.get("covers"), list):
+                    covered.update(str(c) for c in it["covers"])
+    return covered
+
+
+# 逆方向のカバレッジ: 要件定義書にある REQ が、同じ種類の文書のどの covers にも出てこない。
+# consistency ステージのカバレッジ行列でも拾うが、writer が書いた直後に気付けるよう WARN で返す
+# （実戦で REQ-021 がインフラ仕様書・テスト定義書の両方から漏れ、レビュー差し戻しを 2 往復した）。
+COVERAGE_GROUPS = {
+    "test-spec": (("test-spec",), "テスト定義書（doc/test-spec/）"),
+    "infra-spec": (("infra-spec", "api-spec"), "仕様書（doc/infra-spec/ ・ doc/api-spec/）"),
+    "api-spec": (("infra-spec", "api-spec"), "仕様書（doc/infra-spec/ ・ doc/api-spec/）"),
+}
+
+
+def check_uncovered(rep, rel, dtype, project_dir, req_ids):
+    if dtype not in COVERAGE_GROUPS or not req_ids:
+        return
+    dtypes, label = COVERAGE_GROUPS[dtype]
+    missing = sorted(req_ids - collect_covers(project_dir, dtypes))
+    if missing:
+        rep.warn(rel, f"{label}のどの covers にも無い REQ があります: {', '.join(missing)}",
+                 "該当する項目の covers に追加するか、対象外なら理由を本文に書く（consistency ステージで未カバーとして人間判断になる）")
+
+
 def check_ids(rep, rel, items, pattern, body):
     seen = set()
     prefix = pattern.split("-")[0].lstrip("^")
@@ -314,6 +354,7 @@ def validate_doc(path, project_dir, rep):
         if not req_ids:
             rep.warn(rel, "doc/requirements/ に REQ が無いため covers の存在確認をスキップしました")
         check_covers(rep, rel, items, req_ids)
+        check_uncovered(rep, rel, dtype, project_dir, req_ids)
     if dtype == "test-spec":
         check_implemented_by(rep, rel, items, project_dir)
         top = fm.get("covers")

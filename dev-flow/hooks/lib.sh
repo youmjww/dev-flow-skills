@@ -130,7 +130,7 @@ skill_file_for_agent() {
 is_test_file() {
   case "$1" in
     */doc/test-spec/*|doc/test-spec/*) return 0 ;;
-    *_test.go|*_test.py|*/test_*.py|test_*.py|*.test.ts|*.test.tsx|*.test.js|*.test.jsx|*.spec.ts|*.spec.tsx|*.spec.js|*.spec.jsx|*Test.php|*_spec.rb) return 0 ;;
+    *_test.go|*_test.py|*/test_*.py|test_*.py|*.test.ts|*.test.tsx|*.test.js|*.test.jsx|*.spec.ts|*.spec.tsx|*.spec.js|*.spec.jsx|*Test.php|*_spec.rb|*.bats|*_test.sh|*/test_*.sh|test_*.sh) return 0 ;;
     */tests/*|tests/*|*/test/*|test/*|*/__tests__/*|__tests__/*|*/spec/*|spec/*|*/e2e/*|e2e/*) return 0 ;;
   esac
   return 1

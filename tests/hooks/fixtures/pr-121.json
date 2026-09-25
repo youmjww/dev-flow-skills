@@ -1,0 +1,17 @@
+{
+  "number": 121,
+  "state": "OPEN",
+  "isDraft": false,
+  "baseRefName": "feature/xxx",
+  "headRefName": "dev/group-1",
+  "mergeable": "MERGEABLE",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "name": "ci",
+      "status": "IN_PROGRESS",
+      "conclusion": null
+    }
+  ],
+  "url": "https://github.com/o/r/pull/121"
+}

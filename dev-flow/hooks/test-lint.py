@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""テストコードの静的検証（Go / Python / TypeScript・JavaScript / PHP）。
+"""テストコードの静的検証（Go / Python / TypeScript・JavaScript / PHP / シェル）。
 
 conventions/testing.md のルールのうち、ソースを読むだけで判定できるものを機械化する。
 判断が要るもの（分岐網羅・SUT モック・独立性）は reviewer に残す。
@@ -21,6 +21,17 @@ conventions/testing.md のルールのうち、ソースを読むだけで判定
   test/tautology         warn   期待値を SUT と同じ呼び出しで作っている
   test/no-tests          warn   テスト関数が 1 つも無い
   test/ts-ignore         warn   テスト内の @ts-ignore / as any
+
+シェル（*.bats / *_test.sh / test_*.sh / tests/ 配下の *.sh。インフラの結合テスト）:
+  test/no-skip           error  bats の skip
+  test/self-compare      error  [ "$x" = "$x" ] のように同じ値どうしを比較している（常に真）
+  test/assert-present    error  assert の無い bats の @test
+  test/empty-test        error  本体が空の bats の @test
+  test/grep-count-lines  warn   grep -c は「一致した行数」。1 行に複数回出る値の出現回数なら grep -o … | wc -l
+  test/restore-trap      warn   設定・サービスを壊す操作があるのに trap … EXIT で復元していない
+  test/restore-warn-only warn   失敗を `|| echo WARN` で流している（復元・検証の失敗がテスト失敗にならない）
+  test/ipv4-only         warn   IPv4 だけを前提にしたアドレス照合（::ffff:192.0.2.1 の IPv4 射影 IPv6 を取りこぼす）
+  test/deterministic     warn   固定秒数の sleep
 """
 import glob
 import os
@@ -28,7 +39,7 @@ import re
 import sys
 
 TEST_FILE_RE = re.compile(
-    r"(_test\.go|_test\.py|(^|/)test_[^/]*\.py|\.(test|spec)\.(ts|tsx|js|jsx)|Test\.php|_spec\.rb)$"
+    r"(_test\.go|_test\.py|(^|/)test_[^/]*\.py|\.(test|spec)\.(ts|tsx|js|jsx)|Test\.php|_spec\.rb|\.bats|_test\.sh|(^|/)test_[^/]*\.sh)$"
 )
 TEST_DIR_RE = re.compile(r"(^|/)(tests?|__tests__|spec|e2e)/")
 
@@ -42,6 +53,8 @@ def language_of(path):
         return "ts"
     if path.endswith(".php"):
         return "php"
+    if path.endswith((".sh", ".bats")):
+        return "sh"
     return None
 
 
@@ -182,9 +195,92 @@ def split_tests(lines, lang):
     return tests
 
 
+# ---------------------------------------------------------------------------
+# シェル（インフラの結合テスト）
+# ---------------------------------------------------------------------------
+SH = {
+    "test_def": re.compile(r"^\s*@test\s+(['\"])(.*?)\1\s*\{"),
+    "skip": re.compile(r"^\s*skip\b"),
+    # [ "$a" = "$a" ] / [[ $a == $a ]] / test "$a" -eq "$a"
+    "self_compare": re.compile(r"(?:\[\[?|\btest)\s+(\"?\$\{?\w+\}?\"?)\s*(?:==?|!=|-eq|-ne|-ge|-le)\s*(\"?\$\{?\w+\}?\"?)\s*(?:\]\]?|$|;|&&|\|\|)"),
+    "grep_count": re.compile(r"\bgrep\b[^|;]*\s-(?:\w*c\w*)\b|\bgrep\b[^|;]*--count\b"),
+    # 状態を壊す操作（復元が要る）
+    "destructive": re.compile(r"\bsystemctl\s+(stop|disable|mask|kill)\b|\bsed\s+-i\b|\bmv\s+\S*/etc/|\bcp\s+\S+\s+/etc/|\biptables\s+-[AIDF]\b|\bnft\s+(add|delete|flush)\b|\bip\s+link\s+set\s+\S+\s+down\b|\bkill(all)?\s|\bpct\s+(stop|set)\b|\bqm\s+(stop|set)\b"),
+    "trap": re.compile(r"^\s*trap\s+.+\b(EXIT|ERR|INT|TERM)\b"),
+    "bats_teardown": re.compile(r"^\s*teardown(_file)?\s*\(\)"),
+    "warn_only": re.compile(r"\|\|\s*(echo|printf)\b[^;&|]*\b(WARN|warn|Warning|警告)"),
+    "ipv4_regex": re.compile(r"(\[0-9\]|\\d)(\{1,3\}|\+)\\\.(\[0-9\]|\\d)"),
+    "ipv6_aware": re.compile(r"::ffff:|ffff|ipv6|IPv6|inet6|-6\b"),
+    "sleep": re.compile(r"^\s*sleep\s+\d"),
+    "assert": re.compile(r"\[\[?\s|\btest\s|\bassert\w*\b|\brefute\w*\b|\bgrep\s+(-\w*q|--quiet)|\bfail\b|\bexit\s+1\b|\breturn\s+1\b|\bdiff\s|\bcmp\s|\(\(.*[<>=]"),
+}
+
+
+def strip_sh_comment(line):
+    s = line.lstrip()
+    return "" if s.startswith("#") and not s.startswith("#!") else line
+
+
+def lint_shell(path, lines, rep):
+    code = [strip_sh_comment(l) for l in lines]
+    full = "\n".join(code)
+    has_trap = any(SH["trap"].match(l) for l in code) or any(SH["bats_teardown"].match(l) for l in code)
+    ipv6_aware = bool(SH["ipv6_aware"].search(full))
+    destructive_reported = False
+    for i, l in enumerate(code, 1):
+        if not l.strip():
+            continue
+        if path.endswith(".bats") and SH["skip"].match(l):
+            rep.add("ERROR", path, i, "test/no-skip", "テストのスキップ。通らないならプロダクション側を直すかエスカレーションする")
+        m = SH["self_compare"].search(l)
+        if m and m.group(1).strip('"') == m.group(2).strip('"'):
+            rep.add("ERROR", path, i, "test/self-compare", f"{m.group(1)} を自分自身と比較している（常に真）。期待値はテスト定義書のリテラルにする")
+        if SH["grep_count"].search(l):
+            rep.add("WARN", path, i, "test/grep-count-lines", "grep -c は一致した「行数」を返す。1 行に複数回出る値の出現回数を数えるなら grep -o PATTERN | wc -l")
+        if SH["warn_only"].search(l):
+            rep.add("WARN", path, i, "test/restore-warn-only", "失敗を WARN 表示だけで流している。復元・検証の失敗はテスト失敗（exit 1）にする")
+        if SH["ipv4_regex"].search(l) and not ipv6_aware:
+            rep.add("WARN", path, i, "test/ipv4-only", "IPv4 だけを前提にしたアドレス照合。::ffff:192.0.2.1 形式（IPv4 射影 IPv6）で来る値を取りこぼさないか確認する")
+        if SH["sleep"].match(l):
+            rep.add("WARN", path, i, "test/deterministic", "固定秒数の sleep。状態をポーリングして待つ（until …; do sleep 1; done に上限を付ける）")
+        if not destructive_reported and not has_trap and SH["destructive"].search(l):
+            rep.add("WARN", path, i, "test/restore-trap", "設定・サービスを変更する操作があるのに trap '…' EXIT（bats は teardown）で復元していない。途中で失敗すると環境が壊れたまま残る")
+            destructive_reported = True
+
+    # bats の @test ごとのルール（素のシェルスクリプトは関数の区切りが無いのでファイル単位のルールのみ）
+    if not path.endswith(".bats"):
+        return
+    starts = [(i, m.group(2)) for i, l in enumerate(lines) if (m := SH["test_def"].match(l))]
+    if not starts:
+        rep.add("WARN", path, 1, "test/no-tests", "@test が見つからない")
+        return
+    for k, (i, name) in enumerate(starts):
+        depth, end = 0, len(lines)
+        for j in range(i, len(lines)):
+            depth += lines[j].count("{") - lines[j].count("}")
+            if depth <= 0:
+                end = j
+                break
+        if k + 1 < len(starts):
+            end = min(end, starts[k + 1][0])
+        body = [l for l in code[i + 1:end] if l.strip() and l.strip() != "}"]
+        if not body:
+            rep.add("ERROR", path, i + 1, "test/empty-test", f"{name}: 本体が空")
+            continue
+        joined = "\n".join(body)
+        if SH["skip"].search(joined):
+            continue
+        if not SH["assert"].search(joined):
+            rep.add("ERROR", path, i + 1, "test/assert-present", f"{name}: assert が無い（結果を検証していない）")
+
+
 def lint_file(path, rep):
     lang = language_of(path)
     if lang is None:
+        return
+    if lang == "sh":
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lint_shell(path, fh.read().split("\n"), rep)
         return
     L = LANG[lang]
     with open(path, encoding="utf-8", errors="replace") as fh:

@@ -8,8 +8,9 @@ implementer（書く側）と reviewer（照合する側）の両方に注入す
 
 | 順 | ソース | 例 |
 |---|---|---|
-| 1 | `conventions/testing.md`（**常に**） | 言語横断のテストコード規約。テスト削除・スキップ禁止、異常系必須、分岐ごとの TC、カバレッジゲート |
-| 1' | `conventions/<language>.md` | `language: Go` → `go.md`、`TypeScript` → `typescript.md`、`PHP` → `php.md`、`Python` → `python.md` |
+| 1 | `conventions/testing.md`（**常に**） | 言語横断のテストコード規約。テスト削除・スキップ禁止、異常系必須、分岐ごとの TC、カバレッジゲート、ミューテーション確認 |
+| 1 | `conventions/maintainability.md`（**常に**） | 言語横断の保守性の規約。車輪の再発明をしない、知識の重複（DRY）、ドメインごとの独立、循環依存 |
+| 1' | `conventions/<language>.md` | `language: Go` → `go.md`、`TypeScript` → `typescript.md`、`PHP` → `php.md`、`Python` → `python.md`、`Shell` / `Bash` → `shell.md`。**Infra グループで差分に `*.sh` / `*.bats` があれば、language に関係なく `shell.md` も足す** |
 | 2 | `conventions/<framework>.md`（あれば） | `framework: Next.js` → `nextjs.md`（`react.md` も先に読む）、`Laravel` → `laravel.md`、`React` → `react.md` |
 | 3 | `{project}/doc/conventions.md`（あれば） | プロジェクト固有の規約。言語・フレームワーク規約と矛盾する場合はこちらが優先 |
 | 4 | プロジェクトの `CLAUDE.md` | サブエージェントが自動で読む。規約が書かれていればレビュー基準として扱う |
@@ -33,7 +34,7 @@ implementer（書く側）と reviewer（照合する側）の両方に注入す
 | 重大度 | 意味 | 例 |
 |---|---|---|
 | `blocker` | マージしてはいけない | 認証・認可の欠落、インジェクション、シークレットのハードコード、データ破壊、テスト改変 |
-| `major` | 動くが後で確実に困る | エラーの握りつぶし、context / cancel の無視、N+1、型の抜け穴（`any` / `interface{}` の濫用）、境界値未テスト |
-| `minor` | 直せると良い | 命名、コメント、軽微な重複、並び順 |
+| `major` | 動くが後で確実に困る | エラーの握りつぶし、context / cancel の無視、N+1、型の抜け穴（`any` / `interface{}` の濫用）、境界値未テスト、業務ルールの重複・既存機能の自作・ドメイン境界の侵犯（`maint/*`） |
+| `minor` | 直せると良い | 命名、コメント、数行の見た目の重複（知識の重複ではないもの）、並び順 |
 
 ルール ID は memory への蓄積キーになる（「`go/errors-wrap` が 3 回指摘された」を数えられるようにするため）。同じ問題には必ず同じ ID を使うこと。

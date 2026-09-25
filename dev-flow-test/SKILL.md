@@ -22,6 +22,20 @@ Agent Teams（`TeamCreate` / `team_name`）は使用しません。テストラ�
 技術スタック: `{tech_stack}`
 E2E テストあり: `{IS_E2E}`
 
+## STEP 0.5: テスト対象を origin の最新に揃える（必須）
+
+テストはローカルのチェックアウトに対して走る。implementation の PR は GitHub 上でマージされるので、ローカルのベースブランチを pull していないと**古いコードをテストして「全件パス」になる**（実戦で origin より 44 コミット遅れたブランチで全件パスと報告し、compliance で実装バグが 2 件見つかった）。
+
+```bash
+BASE="$(jq -r '.base_branch // empty' doc/process/state.json)"   # 無ければ現在のブランチ
+[ -n "$BASE" ] && git switch "$BASE"
+git pull --ff-only
+~/.claude/skills/dev-flow/hooks/verify-remote-state.sh
+```
+
+- `summary: NG 0` でなければテストを始めない。`git pull --ff-only` が失敗する（ローカルに未 push のコミットがある等）なら人間に報告して止める
+- テストランナーには、この出力と `git rev-parse --short HEAD` を渡す。最終報告の先頭に「テスト対象: {branch}@{短いハッシュ}（origin と同期済み）」と書く
+
 ## STEP 1: test-runner-haiku を同期起動
 
 以下の設定で `test-runner-haiku` を起動します（`name="test-runner-haiku"`, `run_in_background=false`, `model="haiku"`）：

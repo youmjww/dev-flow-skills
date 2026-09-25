@@ -41,7 +41,20 @@ reviewer の findings で同じ `rule` が 3 回以上出た場合は下記「me
 - ポート: backend 8000 / frontend 5173。E2E 実行前に `lsof -ti:8000 -sTCP:LISTEN | xargs -r kill` で残留プロセスを止める
 - worktree は `vendor/` `node_modules/` `.env` を含まない（gitignore）。各 worktree で最初に `composer install` / `npm install` / `.env` 作成が要る
 - 長時間コマンドは必ず `timeout N` を付ける。3 分応答が無ければ中断して別手段
+- シェル: Bash ツールは zsh で動く。変数は必ずクォートし、変数の直後に文字が続くときは `${var}` と書く（zsh は `$file:t` を「ファイル名部分」の修飾子として解釈する）。heredoc の区切り文字は本文に出てこない一意な名前（`EOF_SCRIPT` 等）にする
+- Docker: コンテナで lint / テストを動かすときは `--user "$(id -u):$(id -g)"` を付ける。付けないと root 所有の `~/.cache` やビルド成果物が残り、同じマシンの CI ランナーが権限エラーで壊れる
+- ポート 80: ホストで使用中。`:80` を bind する Docker のテストはローカルでは失敗するので CI で確認する（ローカルでは別ポートに割り当てて試す）
 ```
+
+`environment.md` を作るとき・最初のグループを起動する前に、オーケストレーターが次を実際に確かめて書く（推測で書かない）：
+
+| 確認 | コマンド | 書くこと |
+|---|---|---|
+| シェル | `echo "$SHELL"; ps -p $$ -o comm=` | zsh ならクォート・`${var}` の注意 |
+| ランタイムのバージョン | `node -v` / `php -v` / `python3 -V` / `go version` | 要求バージョンと違えば切り替え方法 |
+| 使用中のポート | `ss -ltn`（macOS は `lsof -iTCP -sTCP:LISTEN -n -P`） | テストが使うポートとの衝突 |
+| Docker の実行ユーザー | `docker info --format '{{.SecurityOptions}}'`、`id -u` | rootless か。`--user` の要否 |
+| ホームの権限 | `find ~ -maxdepth 2 -user root 2>/dev/null` | root 所有のファイルが既に残っていないか（あれば人間に報告） |
 
 これが無いと、オーケストレーターが毎回すべてのエージェントのプロンプトに同じ注意を手書きすることになり、書き漏らしたエージェントがハング・失敗する（実例: nvm 未指定で Vite が動かない、`timeout` 無しで `composer create-project` が固まる）。
 
