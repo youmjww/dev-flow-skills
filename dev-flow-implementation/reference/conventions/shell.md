@@ -28,6 +28,7 @@
 - **状態を壊す操作（サービス停止・設定ファイルの書き換え・iptables の変更）の前に `trap restore EXIT` を置く**。途中で失敗しても環境が元に戻るようにする（bats は `teardown`）
 - **復元の失敗はテストの失敗にする**。`|| echo "WARN: 復元に失敗"` で流さない
 - 期待値はテスト定義書のリテラルにする。`[ "$x" = "$x" ]` のように同じ値どうしを比べない。「インストール済みのバージョン」と比べるなら、比較対象はパッケージマネージャ（`dpkg-query -W -f='${Version}' nginx`）から取る
+- 設定変更・プロビジョニングのテストでは、**同じ処理を 2 回実行し、2 回目に何も変わらない**ことも確かめる（設定ファイルの行が重複しない、Ansible の 2 回目が `changed=0`。`maintainability.md` の `maint/idempotent`）
 - `grep -c` は**一致した行数**を返す。1 行に複数回出る値の出現回数なら `grep -o PATTERN | wc -l`
 - アドレスの照合は IPv4 射影 IPv6（`::ffff:192.0.2.1`）でも来ることを前提にする
 - 実行はクリーンなコンテナ（例: `docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/w" -w /w debian:13 …`）で行う。`--user` を付けないと root 所有のファイル（`~/.cache` 等）が残り、以後の CI が壊れる
@@ -36,13 +37,13 @@
 
 | ルール ID | 重大度 | 確認内容 | 確認方法 |
 |---|---|---|---|
-| `sh/eval-input` | blocker | 外部入力を `eval` / `bash -c` / コマンド文字列の組み立てに使っていない | `grep -nE '\beval\b|bash -c|sh -c'` |
-| `sh/secret-hardcode` | blocker | パスワード・トークンがスクリプトに書かれていない | `grep -niE 'pass(word)?=|token=|secret='` |
+| `sh/eval-input` | blocker | 外部入力を `eval` / `bash -c` / コマンド文字列の組み立てに使っていない | `grep -nE '\beval\b\|bash -c\|sh -c'` |
+| `sh/secret-hardcode` | blocker | パスワード・トークンがスクリプトに書かれていない | `grep -niE 'pass(word)?=\|token=\|secret='` |
 | `sh/strict-mode` | major | `set -euo pipefail`（または同等のエラー処理）がある | 先頭 10 行 |
 | `sh/shellcheck` | major | `shellcheck -S warning` が 0 件 | 標準コマンド |
 | `sh/quote` | major | 変数展開がクォートされている | shellcheck の SC2086 / SC2046 |
 | `sh/restore-trap` | major | 状態を壊す操作の前に `trap … EXIT`（bats は `teardown`）で復元している | `test-lint.py` の `test/restore-trap` WARN と、`systemctl stop` / `sed -i` / `iptables` の周辺 |
-| `sh/silent-failure` | major | 失敗を `|| true` / `|| echo WARN` で理由なく握りつぶしていない | `grep -nE '\|\| *(true|echo|:)'` |
+| `sh/silent-failure` | major | 失敗を `\|\| true` / `\|\| echo WARN` で理由なく握りつぶしていない | `grep -nE '[\|]{2} *(true\|echo\|:)'` |
 | `sh/tmp-cleanup` | minor | `mktemp` で作ったファイルを `trap` で消している | `grep -n mktemp` |
 | `sh/portable` | minor | GNU / BSD で挙動が違うコマンドの使い方が対象環境に合っている | `sed -i`、`date -d`、`stat -c` |
 
